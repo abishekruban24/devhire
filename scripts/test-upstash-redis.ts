@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { rateLimit, resetRateLimit } from "../src/lib/rate-limit";
 
 async function testUpstash() {

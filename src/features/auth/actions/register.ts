@@ -2,7 +2,7 @@
 
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimit, resetRateLimit } from "@/lib/rate-limit";
 
 export interface RegisterResult {
   success: boolean;
@@ -56,15 +56,7 @@ export async function registerCandidate(formData: FormData): Promise<RegisterRes
   const password = String(formData.get("password") || "");
   const confirmPassword = String(formData.get("confirmPassword") || "");
 
-  // Rate limiting per email target
-  const limit = await rateLimit(`register:${email}`, 5, 15 * 60 * 1000);
-  if (!limit.success) {
-    return {
-      success: false,
-      message: "Too many registration attempts. Please wait 15 minutes before trying again.",
-    };
-  }
-
+  // 1. Validate inputs first before applying rate limits
   const errors: Record<string, string> = {};
 
   if (!name || name.length < 2) {
@@ -85,6 +77,22 @@ export async function registerCandidate(formData: FormData): Promise<RegisterRes
 
   if (Object.keys(errors).length > 0) {
     return { success: false, errors };
+  }
+
+  // 2. Rate limiting per validated email target
+  const rateLimitKey = `register:${email}`;
+  const limit = await rateLimit(rateLimitKey, 5, 15 * 60 * 1000);
+  if (!limit.success) {
+    if (limit.status === "RATE_LIMITED") {
+      return {
+        success: false,
+        message: "Too many registration attempts. Please wait 15 minutes before trying again.",
+      };
+    }
+    return {
+      success: false,
+      message: "Registration service is temporarily unavailable. Please try again shortly.",
+    };
   }
 
   try {
@@ -119,6 +127,9 @@ export async function registerCandidate(formData: FormData): Promise<RegisterRes
       },
     });
 
+    // Clean up rate limit counter on successful account creation
+    await resetRateLimit(rateLimitKey);
+
     return {
       success: true,
       message: "Account created successfully! Redirecting to login...",
@@ -143,15 +154,7 @@ export async function registerRecruiter(formData: FormData): Promise<RegisterRes
   const password = String(formData.get("password") || "");
   const confirmPassword = String(formData.get("confirmPassword") || "");
 
-  // Rate limiting
-  const limit = await rateLimit(`register:${email}`, 5, 15 * 60 * 1000);
-  if (!limit.success) {
-    return {
-      success: false,
-      message: "Too many registration attempts. Please wait 15 minutes before trying again.",
-    };
-  }
-
+  // 1. Validate inputs first before applying rate limits
   const errors: Record<string, string> = {};
 
   if (!name || name.length < 2) {
@@ -175,6 +178,22 @@ export async function registerRecruiter(formData: FormData): Promise<RegisterRes
 
   if (Object.keys(errors).length > 0) {
     return { success: false, errors };
+  }
+
+  // 2. Rate limiting per validated email target
+  const rateLimitKey = `register:${email}`;
+  const limit = await rateLimit(rateLimitKey, 5, 15 * 60 * 1000);
+  if (!limit.success) {
+    if (limit.status === "RATE_LIMITED") {
+      return {
+        success: false,
+        message: "Too many registration attempts. Please wait 15 minutes before trying again.",
+      };
+    }
+    return {
+      success: false,
+      message: "Registration service is temporarily unavailable. Please try again shortly.",
+    };
   }
 
   try {
@@ -222,6 +241,9 @@ export async function registerRecruiter(formData: FormData): Promise<RegisterRes
 
       return { user, company };
     });
+
+    // Clean up rate limit counter on successful account creation
+    await resetRateLimit(rateLimitKey);
 
     return {
       success: true,

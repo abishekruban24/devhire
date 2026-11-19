@@ -5,8 +5,8 @@ import { Terminal, Layers, Database, ShieldCheck } from "lucide-react";
 export function Footer() {
   return (
     <footer className="border-t border-slate-800/80 bg-[#060910] text-slate-400 text-sm">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 lg:gap-12">
+      <div className="mx-auto max-w-[1536px] px-4 sm:px-6 lg:px-8 xl:px-10 py-12 lg:py-16">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 lg:gap-12 xl:gap-16">
           {/* Brand info */}
           <div className="md:col-span-2 space-y-4">
             <Link href="/" className="flex items-center gap-2.5">

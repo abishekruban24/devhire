@@ -41,7 +41,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const rateLimitKey = `login:${rawEmail}`;
         const limitCheck = await rateLimit(rateLimitKey, 5, 5 * 60 * 1000);
         if (!limitCheck.success) {
-          throw new Error("Too many failed login attempts. Please wait 5 minutes before trying again.");
+          if (limitCheck.status === "RATE_LIMITED") {
+            throw new Error("Too many failed login attempts. Please wait 5 minutes before trying again.");
+          }
+          throw new Error("Authentication service is temporarily unavailable. Please try again shortly.");
         }
 
         // Ensure database URL is configured
@@ -90,7 +93,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             companyName: user.company?.name ?? null,
           };
         } catch (error) {
-          if (error instanceof Error && error.message.includes("Too many")) {
+          if (
+            error instanceof Error &&
+            (error.message.includes("Too many") ||
+              error.message.includes("temporarily unavailable") ||
+              error.message.includes("Authentication service"))
+          ) {
             throw error;
           }
           console.error("[Auth Authorize Error]:", error);

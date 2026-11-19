@@ -47,7 +47,7 @@ async function AuthNavbar() {
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-[#080C14] text-slate-100 flex flex-col selection:bg-blue-600/30 selection:text-white">
+    <div className="min-h-screen bg-[#080C14] text-slate-100 flex flex-col selection:bg-blue-600/30 selection:text-white overflow-x-clip">
       {/* Navigation with partial prerendering stream */}
       <Suspense fallback={<Navbar user={null} />}>
         <AuthNavbar />
@@ -57,10 +57,10 @@ export default function LandingPage() {
         {/* HERO SECTION */}
         <section className="relative overflow-hidden pt-16 pb-20 md:pt-24 md:pb-28">
           {/* Subtle Ambient Background Gradients */}
-          <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[350px] bg-gradient-to-tr from-blue-600/15 via-indigo-600/10 to-violet-600/15 blur-[120px] pointer-events-none rounded-full" />
+          <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] sm:w-[1000px] xl:w-[1200px] h-[400px] bg-gradient-to-tr from-blue-600/15 via-indigo-600/10 to-violet-600/15 blur-[120px] pointer-events-none rounded-full" />
 
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 relative z-10">
-            <div className="text-center max-w-3xl mx-auto space-y-6">
+          <div className="mx-auto max-w-[1536px] px-4 sm:px-6 lg:px-8 xl:px-10 relative z-10">
+            <div className="text-center max-w-4xl xl:max-w-5xl mx-auto space-y-6">
               {/* Badge */}
               <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/25 bg-blue-500/10 px-3.5 py-1 text-xs font-semibold text-blue-400 backdrop-blur-sm">
                 <span className="h-2 w-2 rounded-full bg-blue-400 animate-pulse" />
@@ -68,7 +68,7 @@ export default function LandingPage() {
               </div>
 
               {/* Main Heading */}
-              <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-white leading-[1.12]">
+              <h1 className="text-4xl sm:text-5xl md:text-6xl xl:text-7xl font-extrabold tracking-tight text-white leading-[1.12]">
                 Hire Smarter.{" "}
                 <span className="bg-gradient-to-r from-blue-400 via-indigo-300 to-violet-400 bg-clip-text text-transparent">
                   Prove Your Skills.
@@ -76,7 +76,7 @@ export default function LandingPage() {
               </h1>
 
               {/* Subheading */}
-              <p className="text-base sm:text-lg text-slate-300 leading-relaxed max-w-2xl mx-auto">
+              <p className="text-base sm:text-lg text-slate-300 leading-relaxed max-w-3xl mx-auto">
                 The technical recruitment platform engineered for high-signal engineering evaluations.
                 Replace resume guesswork with sandboxed coding benchmarks, automated test validation,
                 and merit-first talent discovery.
@@ -127,7 +127,7 @@ export default function LandingPage() {
             </div>
 
             {/* HERO CODE & ASSESSMENT TERMINAL PREVIEW */}
-            <div className="mt-14 max-w-4xl mx-auto rounded-2xl border border-slate-800 bg-[#0A0F1D]/90 shadow-2xl shadow-black/60 overflow-hidden">
+            <div className="mt-14 max-w-5xl xl:max-w-6xl mx-auto rounded-2xl border border-slate-800 bg-[#0A0F1D]/90 shadow-2xl shadow-black/60 overflow-hidden">
               {/* Window Title Bar */}
               <div className="flex items-center justify-between border-b border-slate-800/80 bg-[#0E1526] px-4 py-3">
                 <div className="flex items-center gap-2">
@@ -210,8 +210,8 @@ export default function LandingPage() {
 
         {/* FEATURES OVERVIEW SECTION */}
         <section id="features" className="py-20 border-t border-slate-800/80 bg-[#0A0F1D]/50">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="text-center max-w-2xl mx-auto mb-14 space-y-3">
+          <div className="mx-auto max-w-[1536px] px-4 sm:px-6 lg:px-8 xl:px-10">
+            <div className="text-center max-w-3xl mx-auto mb-14 space-y-3">
               <Badge variant="secondary">Engineered For Accuracy</Badge>
               <h2 className="text-3xl font-bold tracking-tight text-white">
                 Comprehensive Technical Hiring Features
@@ -222,7 +222,7 @@ export default function LandingPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 xl:gap-8">
               {/* Feature 1 */}
               <Card className="p-6 border-slate-800 bg-[#0E1526] hover:border-blue-500/40 transition-all">
                 <div className="h-10 w-10 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mb-4">
@@ -312,8 +312,8 @@ export default function LandingPage() {
 
         {/* HOW DEVHIRE WORKS SECTION */}
         <section id="how-it-works" className="py-20 border-t border-slate-800/80">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="text-center max-w-2xl mx-auto mb-16 space-y-3">
+          <div className="mx-auto max-w-[1536px] px-4 sm:px-6 lg:px-8 xl:px-10">
+            <div className="text-center max-w-3xl mx-auto mb-16 space-y-3">
               <Badge variant="violet">Recruitment Workflow</Badge>
               <h2 className="text-3xl font-bold tracking-tight text-white">
                 How DevHire Works
@@ -323,7 +323,7 @@ export default function LandingPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 relative">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 xl:gap-8 relative">
               {/* Step 1 */}
               <div className="relative rounded-xl border border-slate-800 bg-[#0E1526] p-6 space-y-3">
                 <div className="flex items-center justify-between">
@@ -393,10 +393,10 @@ export default function LandingPage() {
 
         {/* DUAL PORTAL PREVIEW CARDS */}
         <section className="py-20 border-t border-slate-800/80 bg-[#080C14]">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="mx-auto max-w-[1536px] px-4 sm:px-6 lg:px-8 xl:px-10">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 xl:gap-10">
               {/* Candidate Hub Card */}
-              <Card className="relative overflow-hidden p-8 border-blue-500/30 bg-gradient-to-br from-[#0E1629] to-[#0A101E] flex flex-col justify-between">
+              <Card className="relative overflow-hidden p-8 xl:p-10 border-blue-500/30 bg-gradient-to-br from-[#0E1629] to-[#0A101E] flex flex-col justify-between">
                 <div className="space-y-4">
                   <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2.5 py-1 rounded-md">
                     <UserCheck className="h-3.5 w-3.5" />
@@ -434,7 +434,7 @@ export default function LandingPage() {
               </Card>
 
               {/* Recruiter Suite Card */}
-              <Card className="relative overflow-hidden p-8 border-violet-500/30 bg-gradient-to-br from-[#121129] to-[#0D0B1C] flex flex-col justify-between">
+              <Card className="relative overflow-hidden p-8 xl:p-10 border-violet-500/30 bg-gradient-to-br from-[#121129] to-[#0D0B1C] flex flex-col justify-between">
                 <div className="space-y-4">
                   <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-violet-400 bg-violet-500/10 border border-violet-500/20 px-2.5 py-1 rounded-md">
                     <Briefcase className="h-3.5 w-3.5" />

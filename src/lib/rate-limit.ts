@@ -32,25 +32,60 @@ if (typeof setInterval !== "undefined") {
   }, 5 * 60 * 1000).unref?.();
 }
 
+export type RateLimitStatus =
+  | "ALLOWED"
+  | "RATE_LIMITED"
+  | "SERVICE_UNAVAILABLE"
+  | "CONFIG_ERROR";
+
 export interface RateLimitResult {
   success: boolean;
+  status: RateLimitStatus;
   limit: number;
   remaining: number;
   resetMs: number;
   isDistributed?: boolean;
+  message?: string;
+}
+
+function sanitizeConfig(val?: string): string {
+  if (!val) return "";
+  let s = val.trim();
+  if (
+    (s.startsWith('"') && s.endsWith('"')) ||
+    (s.startsWith("'") && s.endsWith("'"))
+  ) {
+    s = s.slice(1, -1).trim();
+  }
+  return s;
+}
+
+export function getUpstashConfig() {
+  const rawUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const rawToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+  const url = sanitizeConfig(rawUrl).replace(/\/+$/, "");
+  let token = sanitizeConfig(rawToken);
+  if (token.startsWith("Bearer ")) {
+    token = token.slice(7).trim();
+  }
+
+  return {
+    url: url || undefined,
+    token: token || undefined,
+  };
 }
 
 /**
  * Checks and increments rate limit for a given key.
- * Uses Upstash Redis if configured; otherwise uses local memory store.
+ * Uses Upstash Redis if configured; otherwise uses local memory store in dev/test.
  */
 export async function rateLimit(
   key: string,
   limit = 5,
   windowMs = 15 * 60 * 1000
 ): Promise<RateLimitResult> {
-  const upstashUrl = process.env.UPSTASH_REDIS_REST_URL;
-  const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const { url: upstashUrl, token: upstashToken } = getUpstashConfig();
 
   // 1. Distributed Rate Limiting via Upstash Redis REST API
   if (upstashUrl && upstashToken) {
@@ -64,7 +99,8 @@ export async function rateLimit(
         },
         body: JSON.stringify([
           ["INCR", key],
-          ["EXPIRE", key, windowSeconds],
+          ["EXPIRE", key, windowSeconds, "NX"],
+          ["TTL", key],
         ]),
         cache: "no-store",
       });
@@ -73,23 +109,39 @@ export async function rateLimit(
         const data = await pipelineRes.json();
         const count = Number(data[0]?.result ?? 1);
         const remaining = Math.max(0, limit - count);
+        const ttlSeconds = Number(data[2]?.result ?? windowSeconds);
+        const resetMs = ttlSeconds > 0 ? ttlSeconds * 1000 : windowMs;
+        const isAllowed = count <= limit;
 
         return {
-          success: count <= limit,
+          success: isAllowed,
+          status: isAllowed ? "ALLOWED" : "RATE_LIMITED",
           limit,
           remaining,
-          resetMs: windowMs,
+          resetMs,
           isDistributed: true,
+          message: isAllowed
+            ? undefined
+            : `Too many attempts. Please wait ${Math.ceil(resetMs / 60000)} minutes before trying again.`,
         };
       } else {
-        console.error(`[RateLimit Error]: Upstash Redis returned HTTP ${pipelineRes.status}`);
+        const isAuthError = pipelineRes.status === 401 || pipelineRes.status === 403;
+        console.error(
+          `[RateLimit Error]: Upstash Redis returned HTTP ${pipelineRes.status}${
+            isAuthError ? " (Unauthorized / Forbidden: Check UPSTASH_REDIS_REST_TOKEN)" : ""
+          }`
+        );
         if (process.env.NODE_ENV === "production") {
           return {
             success: false,
+            status: isAuthError ? "CONFIG_ERROR" : "SERVICE_UNAVAILABLE",
             limit,
             remaining: 0,
             resetMs: windowMs,
             isDistributed: true,
+            message: isAuthError
+              ? "Rate limiting service configuration error."
+              : "Rate limiting service is temporarily unavailable. Please try again shortly.",
           };
         }
       }
@@ -98,10 +150,12 @@ export async function rateLimit(
       if (process.env.NODE_ENV === "production") {
         return {
           success: false,
+          status: "SERVICE_UNAVAILABLE",
           limit,
           remaining: 0,
           resetMs: windowMs,
           isDistributed: true,
+          message: "Rate limiting service is temporarily unavailable. Please try again shortly.",
         };
       }
     }
@@ -115,10 +169,12 @@ export async function rateLimit(
     );
     return {
       success: false,
+      status: "CONFIG_ERROR",
       limit,
       remaining: 0,
       resetMs: windowMs,
       isDistributed: false,
+      message: "Rate limiting configuration error. Required credentials missing.",
     };
   }
 
@@ -133,6 +189,7 @@ export async function rateLimit(
     });
     return {
       success: true,
+      status: "ALLOWED",
       limit,
       remaining: limit - 1,
       resetMs: windowMs,
@@ -141,20 +198,25 @@ export async function rateLimit(
   }
 
   if (existing.count >= limit) {
+    const remainingResetMs = Math.max(0, existing.resetAt - now);
     return {
       success: false,
+      status: "RATE_LIMITED",
       limit,
       remaining: 0,
-      resetMs: Math.max(0, existing.resetAt - now),
+      resetMs: remainingResetMs,
       isDistributed: false,
+      message: `Too many attempts. Please wait ${Math.ceil(remainingResetMs / 60000)} minutes before trying again.`,
     };
   }
 
   existing.count += 1;
+  const remaining = limit - existing.count;
   return {
     success: true,
+    status: "ALLOWED",
     limit,
-    remaining: limit - existing.count,
+    remaining,
     resetMs: Math.max(0, existing.resetAt - now),
     isDistributed: false,
   };
@@ -164,8 +226,7 @@ export async function rateLimit(
  * Resets rate limit for a key upon successful authentication
  */
 export async function resetRateLimit(key: string): Promise<void> {
-  const upstashUrl = process.env.UPSTASH_REDIS_REST_URL;
-  const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const { url: upstashUrl, token: upstashToken } = getUpstashConfig();
 
   if (upstashUrl && upstashToken) {
     try {
