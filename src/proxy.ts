@@ -1,10 +1,11 @@
-import { NextResponse } from "next/server";
+import { validateAuthEnvironment } from "@/lib/env-diagnostics";
+import { NextResponse, type NextRequest, type NextFetchEvent } from "next/server";
 import NextAuth from "next-auth";
 import { authConfig } from "@/auth.config";
 
 const { auth } = NextAuth(authConfig);
 
-export default auth((req) => {
+const authMiddleware = auth((req) => {
   const { nextUrl } = req;
   const session = req.auth;
   const isLoggedIn = !!session?.user;
@@ -42,6 +43,35 @@ export default auth((req) => {
 
   return NextResponse.next();
 });
+
+export default async function proxy(req: NextRequest, event: NextFetchEvent) {
+  const validation = validateAuthEnvironment();
+  if (!validation.isValid) {
+    const pathname = req.nextUrl.pathname;
+    const isProtectedRoute = pathname.startsWith("/candidate") || pathname.startsWith("/recruiter");
+    if (isProtectedRoute) {
+      console.error(
+        `[DevHire Security]: Access to protected route "${pathname}" blocked. Configuration error: ${validation.error}`
+      );
+      return NextResponse.redirect(new URL("/login?error=Configuration", req.nextUrl));
+    }
+    return NextResponse.next();
+  }
+
+  try {
+    return await (authMiddleware as unknown as (req: NextRequest, event: NextFetchEvent) => Promise<Response>)(req, event);
+  } catch (err) {
+    console.error(
+      "[DevHire Security]: Authentication proxy error, failing securely:",
+      err instanceof Error ? err.message : "Unknown error"
+    );
+    const pathname = req.nextUrl.pathname;
+    if (pathname.startsWith("/candidate") || pathname.startsWith("/recruiter")) {
+      return NextResponse.redirect(new URL("/login?error=Configuration", req.nextUrl));
+    }
+    return NextResponse.next();
+  }
+}
 
 export const config = {
   matcher: [

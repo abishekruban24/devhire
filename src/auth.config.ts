@@ -1,8 +1,10 @@
+import "@/lib/env-diagnostics";
 import type { NextAuthConfig } from "next-auth";
 import type { UserRole } from "@/types";
 
 export const authConfig: NextAuthConfig = {
   trustHost: true,
+  basePath: "/api/auth",
   pages: {
     signIn: "/login",
   },

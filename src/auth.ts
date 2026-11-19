@@ -1,3 +1,4 @@
+import { validateAuthEnvironment } from "@/lib/env-diagnostics";
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
@@ -27,6 +28,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         if (!rawEmail || !rawPassword) {
           return null;
+        }
+
+        // Fail securely if authentication environment is not valid
+        const validation = validateAuthEnvironment();
+        if (!validation.isValid) {
+          console.error(`[DevHire Auth Configuration Error]: Login denied. Reason: ${validation.error}`);
+          throw new Error("Authentication service is temporarily unavailable due to server configuration.");
         }
 
         // Apply brute-force protection: 5 attempts per 5 minutes per email

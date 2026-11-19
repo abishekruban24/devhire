@@ -24,7 +24,24 @@ export const metadata: Metadata = {
 export const instant = false;
 
 export default async function CandidateDashboardPage() {
-  const session = await auth();
+  let session = null;
+  try {
+    session = await auth();
+  } catch (error) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "digest" in error &&
+      typeof (error as { digest: string }).digest === "string"
+    ) {
+      throw error;
+    }
+    console.error(
+      "[Candidate Dashboard Security]: Session retrieval failed, redirecting to login:",
+      error instanceof Error ? error.message : "Unknown error"
+    );
+    redirect("/login?callbackUrl=/candidate/dashboard&error=SessionError");
+  }
 
   // 1. Require authenticated session
   if (!session?.user) {

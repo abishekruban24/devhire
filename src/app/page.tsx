@@ -18,11 +18,31 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardTitle, CardDescription } from "@/components/ui/card";
 
 import { Suspense } from "react";
+import { connection } from "next/server";
 import { auth } from "@/auth";
 
 async function AuthNavbar() {
-  const session = await auth();
-  return <Navbar user={session?.user} />;
+  await connection();
+  let user = null;
+  try {
+    const session = await auth();
+    user = session?.user ?? null;
+  } catch (error) {
+    // Next.js internal prerendering and redirect signals must be re-thrown
+    if (
+      error &&
+      typeof error === "object" &&
+      "digest" in error &&
+      typeof (error as { digest: string }).digest === "string"
+    ) {
+      throw error;
+    }
+    console.error(
+      "[Homepage AuthNavbar]: Session resolution encountered an error, falling back to guest view:",
+      error instanceof Error ? error.message : "Authentication error"
+    );
+  }
+  return <Navbar user={user} />;
 }
 
 export default function LandingPage() {
