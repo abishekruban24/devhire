@@ -3,6 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { signOut } from "next-auth/react";
 import {
   Terminal,
   LayoutDashboard,
@@ -16,15 +17,38 @@ import {
   ChevronRight,
   Sparkles,
   Settings,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+export interface SidebarUser {
+  name?: string | null;
+  email?: string | null;
+  role?: string | null;
+  companyName?: string | null;
+}
 
 export interface SidebarProps {
   role: "candidate" | "recruiter";
   className?: string;
+  user?: SidebarUser | null;
 }
 
-export function Sidebar({ role, className }: SidebarProps) {
+function getInitials(name?: string | null, email?: string | null, fallback = "DH"): string {
+  if (name && name.trim()) {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+  if (email && email.trim()) {
+    return email.trim().slice(0, 2).toUpperCase();
+  }
+  return fallback;
+}
+
+export function Sidebar({ role, className, user }: SidebarProps) {
   const pathname = usePathname();
 
   const candidateNavItems = [
@@ -44,6 +68,23 @@ export function Sidebar({ role, className }: SidebarProps) {
   ];
 
   const navItems = role === "candidate" ? candidateNavItems : recruiterNavItems;
+
+  const displayName = user?.name || user?.email || (role === "candidate" ? "Alex Chen" : "Sarah Lin");
+  const displayRoleLabel =
+    role === "candidate"
+      ? user
+        ? "Candidate (Verified)"
+        : "Candidate (Full Stack)"
+      : user?.companyName
+      ? `Recruiter • ${user.companyName}`
+      : user
+      ? "Technical Recruiter"
+      : "Lead Tech Recruiter";
+  const initials = getInitials(user?.name, user?.email, role === "candidate" ? "AC" : "SL");
+
+  const handleSignOut = async () => {
+    await signOut({ callbackUrl: "/login" });
+  };
 
   return (
     <div
@@ -115,40 +156,52 @@ export function Sidebar({ role, className }: SidebarProps) {
             })}
           </div>
 
-          {/* Role Switcher Section */}
-          <div className="rounded-xl border border-slate-800/80 bg-slate-900/50 p-3">
-            <div className="flex items-center gap-2 text-xs font-semibold text-slate-300 mb-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-              <span>Role Switcher (Phase 1)</span>
+          {/* Role Status or Switcher */}
+          {user ? (
+            <div className="rounded-xl border border-slate-800/80 bg-slate-900/50 p-3">
+              <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 mb-1">
+                <ShieldCheck className="h-3.5 w-3.5" />
+                <span>Active Session</span>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Role locked to <span className="text-white font-medium capitalize">{role}</span> account.
+              </p>
             </div>
-            <p className="text-[11px] text-slate-400 mb-2 leading-relaxed">
-              Toggle between roles to review both perspective mock layouts:
-            </p>
-            <div className="grid grid-cols-2 gap-1.5 text-xs">
-              <Link
-                href="/candidate/dashboard"
-                className={cn(
-                  "py-1.5 text-center rounded-md font-medium transition-all text-[11px]",
-                  role === "candidate"
-                    ? "bg-blue-600 text-white shadow-sm"
-                    : "bg-slate-800 text-slate-400 hover:text-white"
-                )}
-              >
-                Candidate
-              </Link>
-              <Link
-                href="/recruiter/dashboard"
-                className={cn(
-                  "py-1.5 text-center rounded-md font-medium transition-all text-[11px]",
-                  role === "recruiter"
-                    ? "bg-violet-600 text-white shadow-sm"
-                    : "bg-slate-800 text-slate-400 hover:text-white"
-                )}
-              >
-                Recruiter
-              </Link>
+          ) : (
+            <div className="rounded-xl border border-slate-800/80 bg-slate-900/50 p-3">
+              <div className="flex items-center gap-2 text-xs font-semibold text-slate-300 mb-1.5">
+                <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+                <span>Role Switcher (Demo Mode)</span>
+              </div>
+              <p className="text-[11px] text-slate-400 mb-2 leading-relaxed">
+                Toggle between roles to review both perspective mock layouts:
+              </p>
+              <div className="grid grid-cols-2 gap-1.5 text-xs">
+                <Link
+                  href="/candidate/dashboard"
+                  className={cn(
+                    "py-1.5 text-center rounded-md font-medium transition-all text-[11px]",
+                    role === "candidate"
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "bg-slate-800 text-slate-400 hover:text-white"
+                  )}
+                >
+                  Candidate
+                </Link>
+                <Link
+                  href="/recruiter/dashboard"
+                  className={cn(
+                    "py-1.5 text-center rounded-md font-medium transition-all text-[11px]",
+                    role === "recruiter"
+                      ? "bg-violet-600 text-white shadow-sm"
+                      : "bg-slate-800 text-slate-400 hover:text-white"
+                  )}
+                >
+                  Recruiter
+                </Link>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Settings Link */}
           <div className="pt-1">
@@ -172,23 +225,36 @@ export function Sidebar({ role, className }: SidebarProps) {
               role === "candidate" ? "bg-blue-600" : "bg-violet-600"
             )}
           >
-            {role === "candidate" ? "AC" : "SL"}
+            {initials}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-xs font-semibold text-white truncate">
-              {role === "candidate" ? "Alex Chen" : "Sarah Lin"}
+            <div className="text-xs font-semibold text-white truncate" title={displayName}>
+              {displayName}
             </div>
-            <div className="text-[11px] text-slate-400 truncate">
-              {role === "candidate" ? "Candidate (Full Stack)" : "Lead Tech Recruiter"}
+            <div className="text-[11px] text-slate-400 truncate" title={displayRoleLabel}>
+              {displayRoleLabel}
             </div>
           </div>
-          <Link
-            href="/"
-            title="Return to Landing Page"
-            className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800/60 transition-colors"
-          >
-            <LogOut className="h-4 w-4" />
-          </Link>
+          {user ? (
+            <button
+              type="button"
+              onClick={handleSignOut}
+              title="Sign Out of DevHire"
+              className="text-slate-400 hover:text-rose-400 p-1.5 rounded-md hover:bg-slate-800/60 transition-colors focus:outline-none focus:ring-1 focus:ring-rose-500"
+              aria-label="Sign Out"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          ) : (
+            <Link
+              href="/login"
+              title="Sign In"
+              className="text-slate-400 hover:text-white p-1.5 rounded-md hover:bg-slate-800/60 transition-colors"
+              aria-label="Sign In"
+            >
+              <LogOut className="h-4 w-4" />
+            </Link>
+          )}
         </div>
       </div>
     </div>

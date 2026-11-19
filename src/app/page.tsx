@@ -17,11 +17,21 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardTitle, CardDescription } from "@/components/ui/card";
 
+import { Suspense } from "react";
+import { auth } from "@/auth";
+
+async function AuthNavbar() {
+  const session = await auth();
+  return <Navbar user={session?.user} />;
+}
+
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#080C14] text-slate-100 flex flex-col selection:bg-blue-600/30 selection:text-white">
-      {/* Navigation */}
-      <Navbar />
+      {/* Navigation with partial prerendering stream */}
+      <Suspense fallback={<Navbar user={null} />}>
+        <AuthNavbar />
+      </Suspense>
 
       <main className="flex-1">
         {/* HERO SECTION */}

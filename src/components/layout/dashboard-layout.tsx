@@ -6,10 +6,13 @@ import { DashboardHeader, DashboardHeaderProps } from "./dashboard-header";
 import { MobileSidebarDrawer } from "./mobile-sidebar-drawer";
 import { BackToTop } from "@/components/ui/back-to-top";
 
+import type { SidebarUser } from "./sidebar";
+
 interface DashboardLayoutProps {
   role: "candidate" | "recruiter";
   title: string;
   subtitle: string;
+  user?: SidebarUser | null;
   actionButton?: DashboardHeaderProps["actionButton"];
   children: React.ReactNode;
 }
@@ -18,6 +21,7 @@ export function DashboardLayout({
   role,
   title,
   subtitle,
+  user,
   actionButton,
   children,
 }: DashboardLayoutProps) {
@@ -31,11 +35,12 @@ export function DashboardLayout({
         isOpen={mobileDrawerOpen}
         onClose={() => setMobileDrawerOpen(false)}
         role={role}
+        user={user}
       />
 
       {/* Stationary Desktop Sidebar (~260px wide, outside scroll container) */}
       <aside className="hidden h-full w-[260px] shrink-0 border-r border-slate-800/80 bg-[#0A0F1D] md:flex md:flex-col">
-        <Sidebar role={role} />
+        <Sidebar role={role} user={user} />
       </aside>
 
       {/* Right Column: Stationary Header + Scrollable Content Panel */}
@@ -46,6 +51,7 @@ export function DashboardLayout({
             title={title}
             subtitle={subtitle}
             role={role === "candidate" ? "Candidate" : "Recruiter"}
+            user={user}
             actionButton={actionButton}
             onMenuClick={() => setMobileDrawerOpen(true)}
           />

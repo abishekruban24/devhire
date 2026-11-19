@@ -1,5 +1,7 @@
 import React from "react";
 import { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { MockDataBanner } from "@/components/ui/mock-banner";
 import { ProfileOverviewCard } from "@/features/candidate/components/profile-overview-card";
@@ -19,12 +21,34 @@ export const metadata: Metadata = {
     "Candidate dashboard with verified skill profile, technical assessment schedule, and active applications.",
 };
 
-export default function CandidateDashboardPage() {
+export const instant = false;
+
+export default async function CandidateDashboardPage() {
+  const session = await auth();
+
+  // 1. Require authenticated session
+  if (!session?.user) {
+    redirect("/login?callbackUrl=/candidate/dashboard");
+  }
+
+  // 2. Enforce role separation: Recruiters redirected to recruiter suite
+  if (session.user.role === "RECRUITER") {
+    redirect("/recruiter/dashboard");
+  }
+
+  // Personalize candidate profile with authenticated session details
+  const personalizedProfile = {
+    ...MOCK_CANDIDATE_PROFILE,
+    name: session.user.name || MOCK_CANDIDATE_PROFILE.name,
+    email: session.user.email || MOCK_CANDIDATE_PROFILE.email,
+  };
+
   return (
     <DashboardLayout
       role="candidate"
       title="Candidate Engineering Hub"
       subtitle="Skill verification, active applications, and upcoming coding challenges"
+      user={session.user}
       actionButton={{
         label: "Explore Open Roles",
         href: "#jobs",
@@ -34,7 +58,7 @@ export default function CandidateDashboardPage() {
       <MockDataBanner role="Candidate" />
 
       {/* Section 1: Candidate Profile Overview */}
-      <ProfileOverviewCard profile={MOCK_CANDIDATE_PROFILE} />
+      <ProfileOverviewCard profile={personalizedProfile} />
 
       {/* Section 2: Technical Assessments Preview */}
       <UpcomingAssessmentsPreview assessments={MOCK_ASSESSMENTS} />

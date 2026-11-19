@@ -8,6 +8,10 @@ export interface DashboardHeaderProps {
   title: string;
   subtitle: string;
   role: "Candidate" | "Recruiter";
+  user?: {
+    name?: string | null;
+    email?: string | null;
+  } | null;
   actionButton?: {
     label: string;
     href?: string;
@@ -20,6 +24,7 @@ export function DashboardHeader({
   title,
   subtitle,
   role,
+  user,
   actionButton,
   onMenuClick,
 }: DashboardHeaderProps) {
@@ -65,7 +70,7 @@ export function DashboardHeader({
         <div className="flex items-center gap-3 self-end sm:self-center">
           <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-400 bg-slate-900/80 px-2.5 py-1.5 rounded-lg border border-slate-800">
             <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
-            <span>Phase 1 Mock Mode</span>
+            <span>{user ? "Verified Session" : "Phase 1 Mock Mode"}</span>
           </div>
 
           {actionButton && (

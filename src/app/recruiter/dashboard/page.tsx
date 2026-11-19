@@ -1,5 +1,7 @@
 import React from "react";
 import { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { MockDataBanner } from "@/components/ui/mock-banner";
 import { HiringOverviewMetrics } from "@/features/recruiter/components/hiring-overview-metrics";
@@ -18,12 +20,33 @@ export const metadata: Metadata = {
     "Recruiter management console with hiring metrics, job postings preview, candidate pipeline, and assessment analytics.",
 };
 
-export default function RecruiterDashboardPage() {
+export const instant = false;
+
+export default async function RecruiterDashboardPage() {
+  const session = await auth();
+
+  // 1. Require authenticated session
+  if (!session?.user) {
+    redirect("/login?callbackUrl=/recruiter/dashboard");
+  }
+
+  // 2. Enforce role separation: Candidates redirected to candidate hub
+  if (session.user.role === "CANDIDATE") {
+    redirect("/candidate/dashboard");
+  }
+
+  // Personalize company overview with authenticated recruiter company name
+  const personalizedCompany = {
+    ...MOCK_RECRUITER_COMPANY,
+    name: session.user.companyName || MOCK_RECRUITER_COMPANY.name,
+  };
+
   return (
     <DashboardLayout
       role="recruiter"
       title="Recruiter Management Suite"
       subtitle="Talent pipeline, coding evaluation benchmarks, and active job postings"
+      user={session.user}
       actionButton={{
         label: "Create Assessment",
         href: "#assessments",
@@ -33,7 +56,7 @@ export default function RecruiterDashboardPage() {
       <MockDataBanner role="Recruiter" />
 
       {/* Section 1: Hiring Overview Metrics */}
-      <HiringOverviewMetrics overview={MOCK_RECRUITER_COMPANY} />
+      <HiringOverviewMetrics overview={personalizedCompany} />
 
       {/* Section 2: Active Job Postings */}
       <ActiveJobPostingsPreview jobs={MOCK_RECRUITER_JOBS} />

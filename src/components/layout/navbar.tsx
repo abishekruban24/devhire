@@ -2,11 +2,38 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { Terminal, Menu, X, ArrowRight, UserCheck, Briefcase } from "lucide-react";
+import { signOut } from "next-auth/react";
+import {
+  Terminal,
+  Menu,
+  X,
+  ArrowRight,
+  UserCheck,
+  Briefcase,
+  LayoutDashboard,
+  LogOut,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export function Navbar() {
+export interface NavbarUser {
+  name?: string | null;
+  email?: string | null;
+  role?: string;
+}
+
+export interface NavbarProps {
+  user?: NavbarUser | null;
+}
+
+export function Navbar({ user }: NavbarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const dashboardHref =
+    user?.role === "RECRUITER" ? "/recruiter/dashboard" : "/candidate/dashboard";
+
+  const handleSignOut = async () => {
+    await signOut({ callbackUrl: "/" });
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-slate-800/80 bg-[#080C14]/85 backdrop-blur-md">
@@ -40,35 +67,74 @@ export function Navbar() {
           >
             How It Works
           </a>
-          <Link
-            href="/candidate/dashboard"
-            className="hover:text-blue-400 transition-colors duration-150 flex items-center gap-1.5"
-          >
-            <UserCheck className="h-3.5 w-3.5 text-blue-400" />
-            Candidate Hub
-          </Link>
-          <Link
-            href="/recruiter/dashboard"
-            className="hover:text-violet-400 transition-colors duration-150 flex items-center gap-1.5"
-          >
-            <Briefcase className="h-3.5 w-3.5 text-violet-400" />
-            Recruiter Suite
-          </Link>
+          {user ? (
+            <Link
+              href={dashboardHref}
+              className="hover:text-blue-400 transition-colors duration-150 flex items-center gap-1.5"
+            >
+              <LayoutDashboard className="h-3.5 w-3.5 text-blue-400" />
+              My Dashboard
+            </Link>
+          ) : (
+            <>
+              <Link
+                href="/register/candidate"
+                className="hover:text-blue-400 transition-colors duration-150 flex items-center gap-1.5"
+              >
+                <UserCheck className="h-3.5 w-3.5 text-blue-400" />
+                For Candidates
+              </Link>
+              <Link
+                href="/register/recruiter"
+                className="hover:text-violet-400 transition-colors duration-150 flex items-center gap-1.5"
+              >
+                <Briefcase className="h-3.5 w-3.5 text-violet-400" />
+                For Recruiters
+              </Link>
+            </>
+          )}
         </nav>
 
         {/* Action CTAs */}
         <div className="hidden md:flex items-center gap-3">
-          <Link href="/candidate/dashboard">
-            <Button variant="outline" size="sm" className="border-slate-700/80 hover:border-slate-600">
-              Candidate Preview
-            </Button>
-          </Link>
-          <Link href="/recruiter/dashboard">
-            <Button variant="default" size="sm" className="group">
-              Recruiter Preview
-              <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-            </Button>
-          </Link>
+          {user ? (
+            <>
+              <Link href={dashboardHref}>
+                <Button variant="default" size="sm" className="group gap-1.5">
+                  <LayoutDashboard className="h-3.5 w-3.5" />
+                  <span>Go to Dashboard</span>
+                  <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                </Button>
+              </Link>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSignOut}
+                className="border-slate-700/80 hover:border-rose-500/50 hover:text-rose-400 text-slate-300 gap-1.5"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span>Sign Out</span>
+              </Button>
+            </>
+          ) : (
+            <>
+              <Link href="/login">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-slate-700/80 hover:border-slate-600 text-slate-200"
+                >
+                  Sign In
+                </Button>
+              </Link>
+              <Link href="/register">
+                <Button variant="default" size="sm" className="group gap-1.5">
+                  <span>Get Started</span>
+                  <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                </Button>
+              </Link>
+            </>
+          )}
         </div>
 
         {/* Mobile hamburger */}
@@ -102,34 +168,71 @@ export function Navbar() {
             >
               How It Works
             </a>
-            <Link
-              href="/candidate/dashboard"
-              onClick={() => setMobileMenuOpen(false)}
-              className="px-2 py-1.5 text-blue-400 hover:text-blue-300 flex items-center gap-2"
-            >
-              <UserCheck className="h-4 w-4" />
-              Candidate Dashboard
-            </Link>
-            <Link
-              href="/recruiter/dashboard"
-              onClick={() => setMobileMenuOpen(false)}
-              className="px-2 py-1.5 text-violet-400 hover:text-violet-300 flex items-center gap-2"
-            >
-              <Briefcase className="h-4 w-4" />
-              Recruiter Dashboard
-            </Link>
+            {user ? (
+              <Link
+                href={dashboardHref}
+                onClick={() => setMobileMenuOpen(false)}
+                className="px-2 py-1.5 text-blue-400 hover:text-blue-300 flex items-center gap-2"
+              >
+                <LayoutDashboard className="h-4 w-4" />
+                My Dashboard ({user.role?.toLowerCase()})
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/register/candidate"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="px-2 py-1.5 text-blue-400 hover:text-blue-300 flex items-center gap-2"
+                >
+                  <UserCheck className="h-4 w-4" />
+                  Candidate Registration
+                </Link>
+                <Link
+                  href="/register/recruiter"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="px-2 py-1.5 text-violet-400 hover:text-violet-300 flex items-center gap-2"
+                >
+                  <Briefcase className="h-4 w-4" />
+                  Recruiter Registration
+                </Link>
+              </>
+            )}
           </div>
           <div className="pt-2 border-t border-slate-800 flex flex-col gap-2">
-            <Link href="/candidate/dashboard" onClick={() => setMobileMenuOpen(false)}>
-              <Button variant="outline" className="w-full justify-center">
-                Candidate Portal
-              </Button>
-            </Link>
-            <Link href="/recruiter/dashboard" onClick={() => setMobileMenuOpen(false)}>
-              <Button variant="default" className="w-full justify-center">
-                Recruiter Portal
-              </Button>
-            </Link>
+            {user ? (
+              <>
+                <Link href={dashboardHref} onClick={() => setMobileMenuOpen(false)}>
+                  <Button variant="default" className="w-full justify-center gap-2">
+                    <LayoutDashboard className="h-4 w-4" />
+                    <span>Go to Dashboard</span>
+                  </Button>
+                </Link>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    handleSignOut();
+                  }}
+                  className="w-full justify-center gap-2 text-rose-400 border-slate-800"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span>Sign Out</span>
+                </Button>
+              </>
+            ) : (
+              <>
+                <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
+                  <Button variant="outline" className="w-full justify-center">
+                    Sign In
+                  </Button>
+                </Link>
+                <Link href="/register" onClick={() => setMobileMenuOpen(false)}>
+                  <Button variant="default" className="w-full justify-center">
+                    Get Started
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
         </div>
       )}
