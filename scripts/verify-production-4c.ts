@@ -115,7 +115,7 @@ async function runProductionVerification() {
       sessionRec
     );
     if (!jobRes.success || !jobRes.job) {
-      throw new Error(`Failed to create job: ${jobRes.error}`);
+      throw new Error(`Failed to create job: ${JSON.stringify(jobRes.errors)}`);
     }
     jobId = (jobRes.job as { id: string }).id;
     console.log(`  ✓ Job created and published (ID: ${jobId})`);
@@ -203,7 +203,7 @@ async function runProductionVerification() {
       sessionRec
     );
     if (!assessRes.success || !assessRes.assessmentId) {
-      throw new Error(`Failed to create assessment: ${assessRes.error}`);
+      throw new Error(`Failed to create assessment: ${assessRes.message}`);
     }
     assessmentId = assessRes.assessmentId;
 
@@ -242,7 +242,7 @@ async function runProductionVerification() {
       sessionRec
     );
     if (!invRes.success || !invRes.invitationId) {
-      throw new Error(`Failed to create invitation: ${invRes.error}`);
+      throw new Error(`Failed to create invitation: ${invRes.message}`);
     }
     invitationId = invRes.invitationId;
     console.log(`  ✓ Invitation created successfully (ID: ${invitationId})`);
