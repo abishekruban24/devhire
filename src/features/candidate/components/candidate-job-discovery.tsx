@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useTransition } from "react";
 import {
   Search,
   MapPin,
@@ -11,7 +11,6 @@ import {
   ArrowRight,
   X,
   Filter,
-  Sparkles,
   CheckCircle2,
   Globe,
   RotateCcw,
@@ -20,17 +19,23 @@ import {
   ChevronRight,
   Info,
   ShieldCheck,
+  Send,
+  Loader2,
+  FileText,
+  AlertCircle,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { PublishedJobItem } from "@/features/jobs/actions/job-actions";
+import { applyToJob } from "@/features/applications/actions/application-actions";
 import type { JobLocationType, JobType } from "@prisma/client";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 interface CandidateJobDiscoveryProps {
   initialJobs: PublishedJobItem[];
   totalCount: number;
+  initialAppliedJobIds?: string[];
 }
 
 const PAGE_SIZE = 6;
@@ -38,6 +43,7 @@ const PAGE_SIZE = 6;
 export function CandidateJobDiscovery({
   initialJobs,
   totalCount,
+  initialAppliedJobIds = [],
 }: CandidateJobDiscoveryProps) {
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState("");
@@ -46,31 +52,69 @@ export function CandidateJobDiscovery({
   const [selectedExpLevel, setSelectedExpLevel] = useState<string>("ALL");
   const [currentPage, setCurrentPage] = useState(1);
 
+  // Application State
+  const [appliedJobIds, setAppliedJobIds] = useState<Set<string>>(
+    () => new Set(initialAppliedJobIds)
+  );
+  const [coverLetter, setCoverLetter] = useState("");
+  const [isApplyPending, startApplyTransition] = useTransition();
+  const [applyFeedback, setApplyFeedback] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
+
   // Modal State
   const [selectedJob, setSelectedJob] = useState<PublishedJobItem | null>(null);
-  const [applyAttempted, setApplyAttempted] = useState(false);
 
   // Close modal on ESC key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && selectedJob) {
         setSelectedJob(null);
-        setApplyAttempted(false);
+        setCoverLetter("");
+        setApplyFeedback(null);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedJob]);
 
-  // Reset apply attempted state when changing selected job
+  // Open modal for job
   const handleOpenJobModal = (job: PublishedJobItem) => {
     setSelectedJob(job);
-    setApplyAttempted(false);
+    setCoverLetter("");
+    setApplyFeedback(null);
   };
 
   const handleCloseModal = () => {
     setSelectedJob(null);
-    setApplyAttempted(false);
+    setCoverLetter("");
+    setApplyFeedback(null);
+  };
+
+  const handleApplySubmit = () => {
+    if (!selectedJob) return;
+    setApplyFeedback(null);
+
+    startApplyTransition(async () => {
+      const res = await applyToJob({
+        jobId: selectedJob.id,
+        coverLetter: coverLetter.trim() || null,
+      });
+
+      if (res.success) {
+        setAppliedJobIds((prev) => new Set(prev).add(selectedJob.id));
+        setApplyFeedback({
+          type: "success",
+          message: res.message,
+        });
+      } else {
+        setApplyFeedback({
+          type: "error",
+          message: res.message,
+        });
+      }
+    });
   };
 
   // Extract distinct experience levels from jobs
@@ -403,6 +447,12 @@ export function CandidateJobDiscovery({
                       </CardTitle>
                     </div>
                     <div className="shrink-0 flex items-center gap-1.5">
+                      {appliedJobIds.has(job.id) && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-950/80 text-emerald-300 border border-emerald-700/60">
+                          <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+                          Applied
+                        </span>
+                      )}
                       {formatLocationTypeBadge(job.locationType)}
                       <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-800 text-slate-300 border border-slate-700/50">
                         {formatJobType(job.type)}
@@ -474,14 +524,27 @@ export function CandidateJobDiscovery({
                     <Button
                       size="sm"
                       variant="secondary"
-                      className="text-xs group-hover:border-blue-500/50 group-hover:bg-blue-600/10 group-hover:text-blue-300 transition-colors"
+                      className={`text-xs transition-colors ${
+                        appliedJobIds.has(job.id)
+                          ? "border-emerald-700/60 text-emerald-300 bg-emerald-950/30 hover:bg-emerald-950/50"
+                          : "group-hover:border-blue-500/50 group-hover:bg-blue-600/10 group-hover:text-blue-300"
+                      }`}
                       onClick={(e) => {
                         e.stopPropagation();
                         handleOpenJobModal(job);
                       }}
                     >
-                      View Details
-                      <ArrowRight className="h-3 w-3 ml-1 transition-transform group-hover:translate-x-0.5" />
+                      {appliedJobIds.has(job.id) ? (
+                        <>
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 mr-1" />
+                          View Application
+                        </>
+                      ) : (
+                        <>
+                          View Details & Apply
+                          <ArrowRight className="h-3 w-3 ml-1 transition-transform group-hover:translate-x-0.5" />
+                        </>
+                      )}
                     </Button>
                   </div>
                 </CardContent>
@@ -556,10 +619,17 @@ export function CandidateJobDiscovery({
                     <Building2 className="h-4 w-4 text-blue-400 shrink-0" />
                     {selectedJob.company?.name || "Hiring Company"}
                   </span>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-950/60 text-emerald-400 border border-emerald-800/60">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    Accepting Applications
-                  </span>
+                  {appliedJobIds.has(selectedJob.id) ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-950/80 text-emerald-300 border border-emerald-700/60">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                      Already Applied
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-950/60 text-emerald-400 border border-emerald-800/60">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      Accepting Applications
+                    </span>
+                  )}
                 </div>
 
                 <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
@@ -702,35 +772,74 @@ export function CandidateJobDiscovery({
                 )}
               </div>
 
-              {/* Phase 3C Callout Banner (Transparent Application State) */}
-              <div className="rounded-xl border border-blue-500/30 bg-gradient-to-r from-blue-950/40 via-indigo-950/30 to-purple-950/20 p-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                    <Sparkles className="h-4 w-4" />
+              {/* Application Status or Submission Form */}
+              {applyFeedback && (
+                <div
+                  className={`rounded-xl border p-4 text-xs flex items-start gap-2.5 animate-in fade-in duration-150 ${
+                    applyFeedback.type === "success"
+                      ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-200"
+                      : "bg-rose-950/40 border-rose-500/40 text-rose-200"
+                  }`}
+                >
+                  {applyFeedback.type === "success" ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4 text-rose-400 shrink-0 mt-0.5" />
+                  )}
+                  <div className="flex-1">
+                    <strong className="block font-semibold mb-0.5">
+                      {applyFeedback.type === "success" ? "Application Submitted" : "Submission Failed"}
+                    </strong>
+                    {applyFeedback.message}
                   </div>
+                </div>
+              )}
+
+              {appliedJobIds.has(selectedJob.id) ? (
+                /* Already Applied Notice */
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-4 text-xs text-emerald-200 flex items-start gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5" />
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-white uppercase tracking-wider">
-                        Direct Assessment Pipeline • Coming in Phase 3C
-                      </span>
-                      <Badge variant="mock">Phase 3C Preview</Badge>
-                    </div>
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      DevHire connects candidates through objective, automated technical benchmarks rather than manual resume screening. When Phase 3C launches, clicking Apply will match your verified assessment score and submit your profile directly to {selectedJob.company?.name || "the hiring team"}.
+                    <strong className="block text-emerald-100 font-semibold text-sm">
+                      Application Active in Recruitment Pipeline
+                    </strong>
+                    <p className="text-slate-300 leading-relaxed">
+                      You have submitted your profile for <strong>{selectedJob.title}</strong> at{" "}
+                      {selectedJob.company?.name || "this company"}. Your application has been received and is available to the hiring team in their candidate management console.
+                    </p>
+                    <p className="text-[11px] text-emerald-400/90 pt-1">
+                      Monitor your application status and next steps in the Active Applications Tracker above.
                     </p>
                   </div>
                 </div>
-              </div>
+              ) : (
+                /* Cover Letter Submission Box */
+                <div className="rounded-xl border border-blue-500/30 bg-[#0E1526]/80 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-white flex items-center gap-1.5">
+                      <FileText className="h-3.5 w-3.5 text-blue-400" />
+                      Cover Letter & Engineering Highlights (Optional)
+                    </label>
+                    <span className="text-[10px] text-slate-500">
+                      {coverLetter.length} / 3000
+                    </span>
+                  </div>
 
-              {/* Informative message when Apply button is clicked */}
-              {applyAttempted && (
-                <div className="rounded-xl border border-amber-500/30 bg-amber-950/30 p-4 text-xs text-amber-200 flex items-start gap-3 animate-in fade-in duration-150">
-                  <ShieldCheck className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
-                  <div>
-                    <strong className="block text-amber-100 font-semibold mb-0.5">
-                      Application System Launching in Phase 3C
-                    </strong>
-                    Your interest in <strong>{selectedJob.title}</strong> has been acknowledged. In accordance with platform integrity rules, no simulated application records are created until the full assessment submission pipeline is activated in Phase 3C.
+                  <textarea
+                    value={coverLetter}
+                    onChange={(e) => setCoverLetter(e.target.value)}
+                    maxLength={3000}
+                    disabled={isApplyPending}
+                    placeholder="Share key technical accomplishments, architecture experience, or reasons for your interest in this role... (optional, max 3,000 characters)"
+                    className="w-full p-3 rounded-lg border border-slate-700/60 bg-[#080C14] text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 transition-colors resize-none disabled:opacity-50"
+                    rows={4}
+                  />
+
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 pt-0.5">
+                    <span className="flex items-center gap-1.5">
+                      <ShieldCheck className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                      Your verified candidate profile and skills will be securely attached.
+                    </span>
                   </div>
                 </div>
               )}
@@ -753,17 +862,35 @@ export function CandidateJobDiscovery({
                   Close
                 </Button>
 
-                <Button
-                  size="sm"
-                  onClick={() => setApplyAttempted(true)}
-                  className="bg-blue-600 hover:bg-blue-500 text-white font-medium shadow-md shadow-blue-600/20 flex items-center gap-2"
-                >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Apply for Position
-                  <span className="text-[10px] uppercase font-bold bg-blue-800/80 px-1.5 py-0.5 rounded text-blue-200">
-                    Phase 3C
-                  </span>
-                </Button>
+                {appliedJobIds.has(selectedJob.id) ? (
+                  <Button
+                    size="sm"
+                    disabled
+                    className="bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 font-medium text-xs cursor-not-allowed flex items-center gap-1.5"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                    Already Applied
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    disabled={isApplyPending}
+                    onClick={handleApplySubmit}
+                    className="bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs shadow-md shadow-blue-600/20 flex items-center gap-2"
+                  >
+                    {isApplyPending ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Submitting Application...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-3.5 w-3.5" />
+                        Submit Application
+                      </>
+                    )}
+                  </Button>
+                )}
               </div>
             </div>
           </div>

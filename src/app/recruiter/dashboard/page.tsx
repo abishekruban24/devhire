@@ -7,12 +7,10 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { MockDataBanner } from "@/components/ui/mock-banner";
 import { HiringOverviewMetrics } from "@/features/recruiter/components/hiring-overview-metrics";
 import { RecruiterJobManagement, type DatabaseJobItem } from "@/features/recruiter/components/recruiter-job-management";
-import { CandidateApplicationsPreview } from "@/features/recruiter/components/candidate-applications-preview";
+import { RecruiterApplicantManagement } from "@/features/recruiter/components/recruiter-applicant-management";
 import { AssessmentStatisticsPreview } from "@/features/recruiter/components/assessment-statistics-preview";
-import {
-  MOCK_RECRUITER_COMPANY,
-  MOCK_RECRUITER_APPLICATIONS,
-} from "@/features/recruiter/data/mock-recruiter";
+import { MOCK_RECRUITER_COMPANY } from "@/features/recruiter/data/mock-recruiter";
+import type { RecruiterApplicantItem } from "@/features/applications/actions/application-actions";
 
 export const metadata: Metadata = {
   title: "Recruiter Dashboard | DevHire",
@@ -52,8 +50,9 @@ export default async function RecruiterDashboardPage() {
     redirect("/candidate/dashboard");
   }
 
-  // 3. Fetch real recruiter user, company profile, and company jobs from Neon PostgreSQL
+  // 3. Fetch real recruiter user, company profile, company jobs, and candidate applications from Neon PostgreSQL
   let companyJobs: DatabaseJobItem[] = [];
+  let companyApplications: RecruiterApplicantItem[] = [];
   let companyName = session.user.companyName || MOCK_RECRUITER_COMPANY.name;
 
   if (session.user.id) {
@@ -76,28 +75,74 @@ export default async function RecruiterDashboardPage() {
       }
 
       if (dbUser?.companyId) {
-        const fetchedJobs = await prisma.job.findMany({
-          where: { companyId: dbUser.companyId },
-          include: {
-            _count: {
-              select: { applications: true },
+        const [fetchedJobs, fetchedApplications] = await Promise.all([
+          prisma.job.findMany({
+            where: { companyId: dbUser.companyId },
+            include: {
+              _count: {
+                select: { applications: true },
+              },
             },
-          },
-          orderBy: { createdAt: "desc" },
-        });
+            orderBy: { createdAt: "desc" },
+          }),
+          prisma.application.findMany({
+            where: {
+              job: { companyId: dbUser.companyId },
+            },
+            select: {
+              id: true,
+              jobId: true,
+              candidateId: true,
+              status: true,
+              coverLetter: true,
+              notes: true,
+              createdAt: true,
+              updatedAt: true,
+              candidate: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  headline: true,
+                  bio: true,
+                  avatarUrl: true,
+                  skills: true,
+                  githubUrl: true,
+                  linkedinUrl: true,
+                  resumeUrl: true,
+                },
+              },
+              job: {
+                select: {
+                  id: true,
+                  title: true,
+                  slug: true,
+                  location: true,
+                  locationType: true,
+                  type: true,
+                  status: true,
+                },
+              },
+            },
+            orderBy: { createdAt: "desc" },
+          }),
+        ]);
 
         companyJobs = fetchedJobs as unknown as DatabaseJobItem[];
+        companyApplications = fetchedApplications as unknown as RecruiterApplicantItem[];
       }
     } catch (err) {
-      console.error("[Recruiter Dashboard]: Failed to fetch company jobs from database:", err);
+      console.error("[Recruiter Dashboard]: Failed to fetch company jobs and applications from database:", err);
     }
   }
 
   const activeRolesCount = companyJobs.filter((j) => j.status === "PUBLISHED").length;
-  const totalApplicantsCount = companyJobs.reduce(
-    (acc, j) => acc + (j._count?.applications || 0),
-    0
-  );
+  const totalApplicantsCount = companyApplications.length;
+  const shortlistedCount = companyApplications.filter((a) => a.status === "SHORTLISTED").length;
+  const shortlistRate =
+    totalApplicantsCount > 0
+      ? Math.round((shortlistedCount / totalApplicantsCount) * 100)
+      : MOCK_RECRUITER_COMPANY.shortlistRate;
 
   // Personalize company overview with authenticated recruiter company name and real metrics
   const personalizedCompany = {
@@ -106,6 +151,7 @@ export default async function RecruiterDashboardPage() {
     openRolesCount: companyJobs.length > 0 ? activeRolesCount : MOCK_RECRUITER_COMPANY.openRolesCount,
     totalApplicants:
       totalApplicantsCount > 0 ? totalApplicantsCount : MOCK_RECRUITER_COMPANY.totalApplicants,
+    shortlistRate,
   };
 
   return (
@@ -131,10 +177,13 @@ export default async function RecruiterDashboardPage() {
         companyName={companyName}
       />
 
-      {/* Section 3: Candidate Applications Pipeline */}
-      <CandidateApplicationsPreview applications={MOCK_RECRUITER_APPLICATIONS} />
+      {/* Section 3: Candidate Applications Management (Phase 3C - Real Neon PostgreSQL Data) */}
+      <RecruiterApplicantManagement
+        initialApplications={companyApplications}
+        companyJobs={companyJobs.map((j) => ({ id: j.id, title: j.title }))}
+      />
 
-      {/* Section 4: Assessment Statistics & Domain Pass Rates */}
+      {/* Section 4: Assessment Statistics & Domain Pass Rates (Phase 4) */}
       <AssessmentStatisticsPreview />
     </DashboardLayout>
   );

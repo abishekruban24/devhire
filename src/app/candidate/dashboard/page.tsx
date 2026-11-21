@@ -8,13 +8,14 @@ import { MockDataBanner } from "@/components/ui/mock-banner";
 import { ProfileOverviewCard } from "@/features/candidate/components/profile-overview-card";
 import { CandidateJobDiscovery } from "@/features/candidate/components/candidate-job-discovery";
 import { UpcomingAssessmentsPreview } from "@/features/candidate/components/upcoming-assessments-preview";
-import { ApplicationStatusPreview } from "@/features/candidate/components/application-status-preview";
-import {
-  MOCK_CANDIDATE_PROFILE,
-  MOCK_CANDIDATE_APPLICATIONS,
-} from "@/features/candidate/data/mock-candidate";
+import { CandidateApplicationsTracker } from "@/features/candidate/components/candidate-applications-tracker";
+import { MOCK_CANDIDATE_PROFILE } from "@/features/candidate/data/mock-candidate";
 import { MOCK_ASSESSMENTS } from "@/features/assessments/data/mock-assessments";
 import type { PublishedJobItem } from "@/features/jobs/actions/job-actions";
+import {
+  getCandidateApplications,
+  type CandidateApplicationItem,
+} from "@/features/applications/actions/application-actions";
 
 export const metadata: Metadata = {
   title: "Candidate Dashboard | DevHire",
@@ -108,6 +109,19 @@ export default async function CandidateDashboardPage() {
     console.error("[Candidate Dashboard]: Failed to fetch published jobs from database:", err);
   }
 
+  // 4. Fetch candidate's real applications from Neon PostgreSQL
+  let candidateApplications: CandidateApplicationItem[] = [];
+  try {
+    const appsResult = await getCandidateApplications(session);
+    if (appsResult.success) {
+      candidateApplications = appsResult.applications;
+    }
+  } catch (err) {
+    console.error("[Candidate Dashboard]: Failed to fetch candidate applications:", err);
+  }
+
+  const appliedJobIds = candidateApplications.map((app) => app.jobId);
+
   // Personalize candidate profile with authenticated session details
   const personalizedProfile = {
     ...MOCK_CANDIDATE_PROFILE,
@@ -126,7 +140,7 @@ export default async function CandidateDashboardPage() {
         href: "#jobs",
       }}
     >
-      {/* Explicit Mock Data Notice for Assessments/Applications (Phases 3C & 4) */}
+      {/* Explicit Mock Data Notice for Assessments Preview (Phase 4) */}
       <MockDataBanner role="Candidate" />
 
       {/* Section 1: Candidate Profile Overview */}
@@ -135,13 +149,14 @@ export default async function CandidateDashboardPage() {
       {/* Section 2: Technical Assessments Preview (Phase 4) */}
       <UpcomingAssessmentsPreview assessments={MOCK_ASSESSMENTS} />
 
-      {/* Section 3: Applications Status Preview (Phase 3C) */}
-      <ApplicationStatusPreview applications={MOCK_CANDIDATE_APPLICATIONS} />
+      {/* Section 3: Applications Status Tracker (Phase 3C - Real Neon PostgreSQL Data) */}
+      <CandidateApplicationsTracker applications={candidateApplications} />
 
       {/* Section 4: Real Published Jobs Discovery (Phase 3B - Neon PostgreSQL) */}
       <CandidateJobDiscovery
         initialJobs={initialPublishedJobs}
         totalCount={totalPublishedCount}
+        initialAppliedJobIds={appliedJobIds}
       />
     </DashboardLayout>
   );
