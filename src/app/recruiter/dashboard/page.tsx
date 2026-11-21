@@ -13,6 +13,10 @@ import { AssessmentStatisticsPreview } from "@/features/recruiter/components/ass
 import { MOCK_RECRUITER_COMPANY } from "@/features/recruiter/data/mock-recruiter";
 import type { RecruiterApplicantItem } from "@/features/applications/actions/application-actions";
 import type { RecruiterAssessmentItem } from "@/features/assessments/actions/assessment-actions";
+import {
+  getCompanyInvitations,
+  type RecruiterInvitationItem,
+} from "@/features/assessments/actions/invitation-actions";
 
 export const metadata: Metadata = {
   title: "Recruiter Dashboard | DevHire",
@@ -52,10 +56,11 @@ export default async function RecruiterDashboardPage() {
     redirect("/candidate/dashboard");
   }
 
-  // 3. Fetch real recruiter user, company profile, jobs, applications, and assessments from Neon PostgreSQL
+  // 3. Fetch real recruiter user, company profile, jobs, applications, assessments, and invitations from Neon PostgreSQL
   let companyJobs: DatabaseJobItem[] = [];
   let companyApplications: RecruiterApplicantItem[] = [];
   let companyAssessments: RecruiterAssessmentItem[] = [];
+  let companyInvitations: RecruiterInvitationItem[] = [];
   let companyName = session.user.companyName || MOCK_RECRUITER_COMPANY.name;
 
   if (session.user.id) {
@@ -203,9 +208,15 @@ export default async function RecruiterDashboardPage() {
         companyJobs = fetchedJobs as unknown as DatabaseJobItem[];
         companyApplications = fetchedApplications as unknown as RecruiterApplicantItem[];
         companyAssessments = fetchedAssessments as unknown as RecruiterAssessmentItem[];
+
+        // Fetch sent assessment invitations
+        const invRes = await getCompanyInvitations("ALL", session);
+        if (invRes.success) {
+          companyInvitations = invRes.invitations;
+        }
       }
     } catch (err) {
-      console.error("[Recruiter Dashboard]: Failed to fetch company jobs, applications, and assessments from database:", err);
+      console.error("[Recruiter Dashboard]: Failed to fetch company jobs, applications, assessments, and invitations from database:", err);
     }
   }
 
@@ -250,10 +261,12 @@ export default async function RecruiterDashboardPage() {
         companyName={companyName}
       />
 
-      {/* Section 3: Candidate Applications Management (Phase 3C - Real Neon PostgreSQL Data) */}
+      {/* Section 3: Candidate Applications & Assessment Invitations (Real Neon PostgreSQL Data) */}
       <RecruiterApplicantManagement
         initialApplications={companyApplications}
         companyJobs={companyJobs.map((j) => ({ id: j.id, title: j.title }))}
+        companyAssessments={companyAssessments}
+        initialInvitations={companyInvitations}
       />
 
       {/* Section 4: Technical Assessment Library & Creator (Phase 4A - Real Neon PostgreSQL Data) */}

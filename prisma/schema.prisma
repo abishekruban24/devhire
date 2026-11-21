@@ -63,6 +63,14 @@ enum AttemptStatus {
   EXPIRED
 }
 
+enum InvitationStatus {
+  PENDING
+  STARTED
+  COMPLETED
+  EXPIRED
+  REVOKED
+}
+
 enum QuestionDifficulty {
   EASY
   MEDIUM
@@ -100,11 +108,13 @@ model User {
   companyId String?
   company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
-  createdJobs        Job[]               @relation("RecruiterJobs")
-  createdAssessments Assessment[]        @relation("RecruiterAssessments")
-  applications       Application[]
-  assessmentAttempts AssessmentAttempt[]
-  submissions        Submission[]
+  createdJobs              Job[]                  @relation("RecruiterJobs")
+  createdAssessments       Assessment[]           @relation("RecruiterAssessments")
+  applications             Application[]
+  assessmentAttempts       AssessmentAttempt[]
+  candidateInvitations     AssessmentInvitation[] @relation("CandidateInvitations")
+  recruiterInvitationsSent AssessmentInvitation[] @relation("RecruiterInvitationsSent")
+  submissions              Submission[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -127,6 +137,7 @@ model Company {
   members     User[]
   jobs        Job[]
   assessments Assessment[]
+  invitations AssessmentInvitation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -183,6 +194,7 @@ model Application {
   notes       String?           @db.Text
 
   assessmentAttempts AssessmentAttempt[]
+  invitations        AssessmentInvitation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -207,9 +219,10 @@ model Assessment {
   creatorId String
   creator   User   @relation("RecruiterAssessments", fields: [creatorId], references: [id], onDelete: Restrict)
 
-  jobs      Job[]
-  questions Question[]
-  attempts  AssessmentAttempt[]
+  jobs        Job[]
+  questions   Question[]
+  attempts    AssessmentAttempt[]
+  invitations AssessmentInvitation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -264,14 +277,16 @@ model TestCase {
 }
 
 model AssessmentAttempt {
-  id            String        @id @default(uuid())
+  id            String                @id @default(uuid())
   assessmentId  String
-  assessment    Assessment    @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  assessment    Assessment            @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   candidateId   String
-  candidate     User          @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  candidate     User                  @relation(fields: [candidateId], references: [id], onDelete: Cascade)
   applicationId String?
-  application   Application?  @relation(fields: [applicationId], references: [id], onDelete: SetNull)
-  status        AttemptStatus @default(NOT_STARTED)
+  application   Application?          @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  invitationId  String?
+  invitation    AssessmentInvitation? @relation(fields: [invitationId], references: [id], onDelete: SetNull)
+  status        AttemptStatus         @default(NOT_STARTED)
   score         Float?
   startedAt     DateTime?
   submittedAt   DateTime?
@@ -285,6 +300,7 @@ model AssessmentAttempt {
   @@index([assessmentId])
   @@index([candidateId])
   @@index([applicationId])
+  @@index([invitationId])
   @@index([status])
 }
 
@@ -334,4 +350,35 @@ model SubmissionResult {
   @@index([submissionId])
   @@index([testCaseId])
   @@index([passed])
+}
+
+model AssessmentInvitation {
+  id            String           @id @default(uuid())
+  assessmentId  String
+  assessment    Assessment       @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  candidateId   String
+  candidate     User             @relation("CandidateInvitations", fields: [candidateId], references: [id], onDelete: Cascade)
+  applicationId String
+  application   Application      @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  companyId     String
+  company       Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  invitedById   String
+  invitedBy     User             @relation("RecruiterInvitationsSent", fields: [invitedById], references: [id], onDelete: Restrict)
+  status        InvitationStatus @default(PENDING)
+  expiresAt     DateTime?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  revokedAt     DateTime?
+
+  attempts AssessmentAttempt[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([candidateId])
+  @@index([companyId])
+  @@index([assessmentId])
+  @@index([applicationId])
+  @@index([status])
+  @@index([expiresAt])
 }

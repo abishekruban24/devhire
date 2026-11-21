@@ -137,12 +137,17 @@ export interface CandidateVisibleQuestionItem {
 
 export interface CandidateAssessmentPreview {
   id: string;
+  invitationId?: string;
   title: string;
   description: string;
   durationMinutes: number;
   passingScore: number;
   status: AssessmentStatus;
   companyName: string;
+  relatedJobTitle?: string;
+  questionsCount: number;
+  totalPoints: number;
+  expiresAt?: string | null;
   questions: CandidateVisibleQuestionItem[];
 }
 
@@ -1222,7 +1227,15 @@ export async function deleteAssessment(
  * CANDIDATE / PUBLIC ASSESSMENT PREVIEW:
  * STRICT PRIVACY & ANTI-CHEATING SAFEGUARD:
  * - Hidden evaluation test cases (isHidden === true) are NEVER returned.
- * - Only visible sample test cases (isHidden === false) are exposed.
+/**
+ * CANDIDATE ASSESSMENT PREVIEW:
+ * STRICT PRIVACY, AUTHORIZATION & ANTI-CHEATING SAFEGUARDS (PHASE 4B):
+ * 1. Candidates MUST have an authorized invitation for this assessment. Guessed IDs return 403.
+ * 2. Cross-candidate isolation: Candidate can only access invitations belonging to their own user account.
+ * 3. Expired and revoked invitations are rejected with specific error messages.
+ * 4. Assessment must be ACTIVE.
+ * 5. Complete questions and test cases are strictly withheld until proctored attempt initiation in Phase 4C.
+ * 6. Never expose hidden evaluation test cases or recruiter internal configuration.
  */
 export async function getCandidateAssessmentPreview(
   assessmentId: string,
@@ -1233,7 +1246,7 @@ export async function getCandidateAssessmentPreview(
   preview?: CandidateAssessmentPreview;
 }> {
   const authCheck = await authenticateCandidate(sessionOverride);
-  if (!authCheck.authenticated) {
+  if (!authCheck.authenticated || !authCheck.user?.id) {
     return {
       success: false,
       message: authCheck.error || "Authentication required to preview assessment.",
@@ -1242,6 +1255,57 @@ export async function getCandidateAssessmentPreview(
 
   const cleanId = String(assessmentId || "").trim();
   try {
+    // 1. Verify candidate has an authorized invitation for this assessment
+    const invitation = await prisma.assessmentInvitation.findFirst({
+      where: {
+        assessmentId: cleanId,
+        candidateId: authCheck.user.id,
+      },
+      include: {
+        application: {
+          include: {
+            job: {
+              select: {
+                title: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (!invitation) {
+      return {
+        success: false,
+        message: "Access Denied: You do not have an active invitation to access this assessment.",
+      };
+    }
+
+    if (invitation.status === "REVOKED") {
+      return {
+        success: false,
+        message: "Access Denied: This assessment invitation has been revoked by the recruiter.",
+      };
+    }
+
+    if (
+      invitation.status === "EXPIRED" ||
+      (invitation.expiresAt && new Date(invitation.expiresAt) < new Date())
+    ) {
+      if (invitation.status !== "EXPIRED") {
+        await prisma.assessmentInvitation.update({
+          where: { id: invitation.id },
+          data: { status: "EXPIRED" },
+        });
+      }
+      return {
+        success: false,
+        message: "Access Denied: This assessment invitation has expired.",
+      };
+    }
+
+    // 2. Query assessment permitted metadata
     const assessment = await prisma.assessment.findUnique({
       where: { id: cleanId },
       select: {
@@ -1258,29 +1322,11 @@ export async function getCandidateAssessmentPreview(
         },
         questions: {
           select: {
-            id: true,
-            title: true,
-            description: true,
-            difficulty: true,
             points: true,
-            timeLimitMs: true,
-            memoryLimitKb: true,
-            starterCode: true,
-            orderIndex: true,
-            testCases: {
-              where: {
-                isHidden: false, // ANTI-CHEATING: Strictly filter out hidden evaluation cases!
-              },
-              select: {
-                id: true,
-                input: true,
-                expectedOutput: true,
-                explanation: true,
-              },
-              orderBy: { createdAt: "asc" },
-            },
           },
-          orderBy: { orderIndex: "asc" },
+        },
+        _count: {
+          select: { questions: true },
         },
       },
     });
@@ -1296,26 +1342,21 @@ export async function getCandidateAssessmentPreview(
       };
     }
 
+    // 3. Return permitted overview metadata ONLY. Complete coding problems and test cases are withheld until attempt in Phase 4C.
     const preview: CandidateAssessmentPreview = {
       id: assessment.id,
+      invitationId: invitation.id,
       title: assessment.title,
       description: assessment.description,
       durationMinutes: assessment.durationMinutes,
       passingScore: assessment.passingScore,
       status: assessment.status,
       companyName: assessment.company.name,
-      questions: assessment.questions.map((q) => ({
-        id: q.id,
-        title: q.title,
-        description: q.description,
-        difficulty: q.difficulty,
-        points: q.points,
-        timeLimitMs: q.timeLimitMs,
-        memoryLimitKb: q.memoryLimitKb,
-        starterCode: q.starterCode as Record<string, string> | null,
-        orderIndex: q.orderIndex,
-        visibleTestCases: q.testCases,
-      })),
+      relatedJobTitle: invitation.application.job.title,
+      questionsCount: assessment._count.questions,
+      totalPoints: assessment.questions.reduce((sum, q) => sum + q.points, 0),
+      expiresAt: invitation.expiresAt ? invitation.expiresAt.toISOString() : null,
+      questions: [],
     };
 
     return {

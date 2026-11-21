@@ -17,6 +17,7 @@ import {
   deleteAssessment,
   getCandidateAssessmentPreview,
 } from "../src/features/assessments/actions/assessment-actions";
+import { createAssessmentInvitation } from "../src/features/assessments/actions/invitation-actions";
 import type { AssessmentStatus, QuestionDifficulty } from "@prisma/client";
 
 async function runAssessmentTests() {
@@ -402,32 +403,52 @@ async function runAssessmentTests() {
     }
 
     // -------------------------------------------------------------------------
-    // TEST 7: Hidden Test Case Privacy Safeguard (Candidate Anti-Cheating)
+    // TEST 7: Hidden Test Case & Invitation Privacy Safeguard (Candidate Anti-Cheating)
     // -------------------------------------------------------------------------
-    console.log("[Test 7] Testing Hidden Test Case Privacy Safeguard...");
+    console.log("[Test 7] Testing Hidden Test Case & Invitation Privacy Safeguard...");
+    // 7a. Uninvited candidate cannot preview assessment
+    const uninvitedPreviewRes = await getCandidateAssessmentPreview(assessment1Id, candSession);
+    if (!uninvitedPreviewRes.success && uninvitedPreviewRes.message?.includes("Access Denied")) {
+      console.log("  PASS: Uninvited candidate blocked from previewing assessment (403 Access Denied)");
+    } else {
+      console.error("  FAIL: Uninvited candidate was not blocked:", uninvitedPreviewRes);
+      allPassed = false;
+    }
+
+    // 7b. Create application and invitation for candidate
+    const testApp = await prisma.application.create({
+      data: {
+        jobId: publishedJob1Id,
+        candidateId: candidateUserId,
+        status: "SUBMITTED",
+      },
+    });
+
+    const invRes = await createAssessmentInvitation(
+      {
+        applicationId: testApp.id,
+        assessmentId: assessment1Id,
+        expiresInDays: 7,
+      },
+      rec1Session
+    );
+
+    if (invRes.success) {
+      console.log("  PASS: Assessment invitation created for candidate");
+    } else {
+      console.error("  FAIL: Failed to create test invitation:", invRes);
+      allPassed = false;
+    }
+
+    // 7c. Authorized candidate previews assessment - zero hidden cases or full questions exposed
     const candidatePreviewRes = await getCandidateAssessmentPreview(assessment1Id, candSession);
-
     if (candidatePreviewRes.success && candidatePreviewRes.preview) {
-      const questions = candidatePreviewRes.preview.questions;
-      let leakedHiddenCase = false;
-      let visibleCaseFound = false;
-
-      for (const q of questions) {
-        for (const tc of q.visibleTestCases) {
-          visibleCaseFound = true;
-          // Check against database to make sure it's not marked isHidden
-          const dbTc = await prisma.testCase.findUnique({ where: { id: tc.id } });
-          if (dbTc?.isHidden) {
-            leakedHiddenCase = true;
-          }
-        }
-      }
-
-      if (visibleCaseFound && !leakedHiddenCase) {
-        console.log("  PASS: Candidate preview exposes visible sample test cases ONLY");
+      const preview = candidatePreviewRes.preview;
+      if (preview.questions.length === 0 && preview.questionsCount > 0) {
+        console.log("  PASS: Candidate preview exposes overview metadata ONLY");
         console.log("  PASS: ZERO hidden evaluation test cases leaked in candidate API payload");
       } else {
-        console.error("  FAIL: Security breach: Hidden test case leaked to candidate!");
+        console.error("  FAIL: Security breach: Questions leaked in candidate preview:", preview.questions);
         allPassed = false;
       }
     } else {
@@ -564,6 +585,15 @@ async function runAssessmentTests() {
     // -------------------------------------------------------------------------
     console.log("\n[Teardown] Purging test assessments, jobs, users, and companies...");
     try {
+      const compsToClean = [company1Id, company2Id].filter((id): id is string => Boolean(id));
+      if (compsToClean.length > 0) {
+        await prisma.assessmentInvitation.deleteMany({
+          where: { companyId: { in: compsToClean } },
+        });
+        await prisma.application.deleteMany({
+          where: { job: { companyId: { in: compsToClean } } },
+        });
+      }
       if (createdAssessmentIds.length > 0) {
         await prisma.assessment.deleteMany({
           where: { id: { in: createdAssessmentIds } },
@@ -582,7 +612,6 @@ async function runAssessmentTests() {
           where: { id: { in: usersToClean } },
         });
       }
-      const compsToClean = [company1Id, company2Id].filter((id): id is string => Boolean(id));
       if (compsToClean.length > 0) {
         await prisma.company.deleteMany({
           where: { id: { in: compsToClean } },
