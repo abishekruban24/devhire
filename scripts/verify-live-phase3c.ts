@@ -507,7 +507,7 @@ async function runLivePhase3CVerification() {
     // -------------------------------------------------------------------------
     console.log("\n[Step 11] Verifying deletion safeguard for job with active applications...");
     const deleteRes = await deleteJob(publishedJobId, rec1Session);
-    if (!deleteRes.success && deleteRes.message.includes("active candidate application")) {
+    if (!deleteRes.success && deleteRes.message?.includes("active candidate application")) {
       console.log("  ✓ Job deletion prevented by application safeguard:", deleteRes.message);
     } else {
       console.error("  ✗ Safeguard failed: Job was deleted or error message unexpected:", deleteRes);
