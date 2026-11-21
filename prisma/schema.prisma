@@ -63,12 +63,26 @@ enum AttemptStatus {
   EXPIRED
 }
 
+enum EvaluationJobStatus {
+  PENDING
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED_RETRYABLE
+  FAILED_TERMINAL
+}
+
 enum InvitationStatus {
   PENDING
   STARTED
   COMPLETED
   EXPIRED
   REVOKED
+}
+
+enum ReviewStatus {
+  DRAFT
+  PUBLISHED
 }
 
 enum QuestionDifficulty {
@@ -115,6 +129,7 @@ model User {
   candidateInvitations     AssessmentInvitation[] @relation("CandidateInvitations")
   recruiterInvitationsSent AssessmentInvitation[] @relation("RecruiterInvitationsSent")
   submissions              Submission[]
+  reviews                  AssessmentReview[]     @relation("RecruiterReviews")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -245,8 +260,9 @@ model Question {
   starterCode    Json?
   orderIndex     Int                @default(0)
 
-  testCases   TestCase[]
-  submissions Submission[]
+  testCases       TestCase[]
+  submissions     Submission[]
+  questionReviews QuestionReview[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -292,7 +308,9 @@ model AssessmentAttempt {
   submittedAt   DateTime?
   expiresAt     DateTime?
 
-  submissions Submission[]
+  submissions   Submission[]
+  evaluationJob EvaluationJob?
+  review        AssessmentReview?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -381,4 +399,63 @@ model AssessmentInvitation {
   @@index([applicationId])
   @@index([status])
   @@index([expiresAt])
+}
+
+model EvaluationJob {
+  id          String              @id @default(uuid())
+  attemptId   String              @unique
+  attempt     AssessmentAttempt   @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  status      EvaluationJobStatus @default(QUEUED)
+  attempts    Int                 @default(0)
+  maxAttempts Int                 @default(3)
+  lockedAt    DateTime?
+  lockedBy    String?
+  lastError   String?             @db.Text
+  nextRunAt   DateTime            @default(now())
+  completedAt DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([status, nextRunAt])
+  @@index([lockedAt])
+}
+
+model AssessmentReview {
+  id             String            @id @default(uuid())
+  attemptId      String            @unique
+  attempt        AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  reviewerId     String
+  reviewer       User              @relation("RecruiterReviews", fields: [reviewerId], references: [id], onDelete: Cascade)
+  status         ReviewStatus      @default(DRAFT)
+  totalScore     Float             @default(0.0) // Percentage (0 - 100)
+  totalPoints    Float             @default(0.0)
+  pointsPossible Float             @default(0.0)
+  passed         Boolean           @default(false)
+  feedback       String?           @db.Text
+  publishedAt    DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  questionReviews QuestionReview[]
+
+  @@index([attemptId])
+  @@index([reviewerId])
+  @@index([status])
+}
+
+model QuestionReview {
+  id             String           @id @default(uuid())
+  reviewId       String
+  review         AssessmentReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  questionId     String
+  question       Question         @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  pointsEarned   Float            @default(0.0)
+  pointsPossible Float            @default(0.0)
+  feedback       String?          @db.Text
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([reviewId, questionId])
+  @@index([reviewId])
+  @@index([questionId])
 }

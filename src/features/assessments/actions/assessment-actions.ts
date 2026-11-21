@@ -464,7 +464,7 @@ export async function createAssessment(
       }
 
       return assessment;
-    });
+    }, { maxWait: 15000, timeout: 30000 });
 
     safeRevalidatePath("/recruiter/dashboard");
 

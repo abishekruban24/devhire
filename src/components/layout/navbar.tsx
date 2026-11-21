@@ -12,6 +12,7 @@ import {
   Briefcase,
   LayoutDashboard,
   LogOut,
+  LogIn,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -91,6 +92,13 @@ export function Navbar({ user }: NavbarProps) {
                 <Briefcase className="h-3.5 w-3.5 text-violet-400" />
                 For Recruiters
               </Link>
+              <Link
+                href="/login"
+                className="hover:text-white text-slate-300 transition-colors duration-150 flex items-center gap-1.5"
+              >
+                <LogIn className="h-3.5 w-3.5 text-blue-400" />
+                Log In
+              </Link>
             </>
           )}
         </nav>
@@ -124,7 +132,7 @@ export function Navbar({ user }: NavbarProps) {
                   size="sm"
                   className="border-slate-700/80 hover:border-slate-600 text-slate-200"
                 >
-                  Sign In
+                  Log In
                 </Button>
               </Link>
               <Link href="/register">
@@ -195,6 +203,14 @@ export function Navbar({ user }: NavbarProps) {
                   <Briefcase className="h-4 w-4" />
                   Recruiter Registration
                 </Link>
+                <Link
+                  href="/login"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="px-2 py-1.5 text-slate-300 hover:text-white flex items-center gap-2"
+                >
+                  <LogIn className="h-4 w-4 text-blue-400" />
+                  Log In
+                </Link>
               </>
             )}
           </div>
@@ -223,7 +239,7 @@ export function Navbar({ user }: NavbarProps) {
               <>
                 <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
                   <Button variant="outline" className="w-full justify-center">
-                    Sign In
+                    Log In
                   </Button>
                 </Link>
                 <Link href="/register" onClick={() => setMobileMenuOpen(false)}>

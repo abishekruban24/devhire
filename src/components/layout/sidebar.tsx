@@ -18,6 +18,8 @@ import {
   Sparkles,
   Settings,
   ShieldCheck,
+  ClipboardCheck,
+  History,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -55,6 +57,7 @@ export function Sidebar({ role, className, user }: SidebarProps) {
     { label: "Dashboard Overview", href: "/candidate/dashboard", icon: LayoutDashboard },
     { label: "Available Jobs", href: "/candidate/dashboard#jobs", icon: Briefcase },
     { label: "Technical Assessments", href: "/candidate/dashboard#assessments", icon: Code2 },
+    { label: "Assessment History", href: "/candidate/dashboard#history", icon: History },
     { label: "Application Tracker", href: "/candidate/dashboard#applications", icon: FileCheck2 },
     { label: "Candidate Profile", href: "/candidate/dashboard#profile", icon: User },
   ];
@@ -63,6 +66,7 @@ export function Sidebar({ role, className, user }: SidebarProps) {
     { label: "Hiring Overview", href: "/recruiter/dashboard", icon: LayoutDashboard },
     { label: "Job Postings", href: "/recruiter/dashboard#jobs", icon: Briefcase },
     { label: "Assessment Library", href: "/recruiter/dashboard#assessments", icon: Code2 },
+    { label: "Manual Reviews", href: "/recruiter/dashboard#reviews", icon: ClipboardCheck },
     { label: "Candidate Pipeline", href: "/recruiter/dashboard#candidates", icon: Users2 },
     { label: "Company Profile", href: "/recruiter/dashboard#company", icon: Building2 },
   ];

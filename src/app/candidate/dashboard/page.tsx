@@ -4,11 +4,11 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { MockDataBanner } from "@/components/ui/mock-banner";
 import { ProfileOverviewCard } from "@/features/candidate/components/profile-overview-card";
 import { CandidateJobDiscovery } from "@/features/candidate/components/candidate-job-discovery";
 import { UpcomingAssessmentsPreview } from "@/features/candidate/components/upcoming-assessments-preview";
 import { CandidateApplicationsTracker } from "@/features/candidate/components/candidate-applications-tracker";
+import { CandidateAssessmentHistoryTracker } from "@/features/candidate/components/candidate-assessment-history-tracker";
 import { MOCK_CANDIDATE_PROFILE } from "@/features/candidate/data/mock-candidate";
 import type { PublishedJobItem } from "@/features/jobs/actions/job-actions";
 import {
@@ -19,6 +19,10 @@ import {
   getCandidateInvitations,
   type CandidateInvitationItem,
 } from "@/features/assessments/actions/invitation-actions";
+import {
+  getCandidateAssessmentHistory,
+  type CandidateAssessmentHistoryItem,
+} from "@/features/assessments/actions/review-actions";
 
 export const metadata: Metadata = {
   title: "Candidate Dashboard | DevHire",
@@ -99,7 +103,7 @@ export default async function CandidateDashboardPage() {
             select: { applications: true },
           },
         },
-        orderBy: { createdAt: "desc" }, // Sort newest published jobs first
+        orderBy: { createdAt: "desc" },
       }),
       prisma.job.count({
         where: { status: "PUBLISHED" },
@@ -134,6 +138,17 @@ export default async function CandidateDashboardPage() {
     console.error("[Candidate Dashboard]: Failed to fetch candidate assessment invitations:", err);
   }
 
+  // 6. Fetch candidate's real assessment history & review results (Phase 5)
+  let assessmentHistory: CandidateAssessmentHistoryItem[] = [];
+  try {
+    const historyRes = await getCandidateAssessmentHistory(session);
+    if (historyRes.success) {
+      assessmentHistory = historyRes.history;
+    }
+  } catch (err) {
+    console.error("[Candidate Dashboard]: Failed to fetch candidate assessment history:", err);
+  }
+
   const appliedJobIds = candidateApplications.map((app) => app.jobId);
 
   // Personalize candidate profile with authenticated session details
@@ -147,26 +162,26 @@ export default async function CandidateDashboardPage() {
     <DashboardLayout
       role="candidate"
       title="Candidate Engineering Hub"
-      subtitle="Skill verification, active applications, and upcoming coding challenges"
+      subtitle="Skill verification, active applications, and verified technical assessment history"
       user={session.user}
       actionButton={{
         label: "Explore Open Roles",
         href: "#jobs",
       }}
     >
-      {/* Mock Notice */}
-      <MockDataBanner role="Candidate" />
-
       {/* Section 1: Candidate Profile Overview */}
       <ProfileOverviewCard profile={personalizedProfile} />
 
-      {/* Section 2: Technical Assessments & Verified Invitations (Phase 4B - Real Neon PostgreSQL Data) */}
+      {/* Section 2: Technical Assessment History & Results (Phase 5 - Real Neon PostgreSQL Data) */}
+      <CandidateAssessmentHistoryTracker initialHistory={assessmentHistory} />
+
+      {/* Section 3: Technical Assessments & Active Invitations (Phase 4B - Real Neon PostgreSQL Data) */}
       <UpcomingAssessmentsPreview initialInvitations={candidateInvitations} />
 
-      {/* Section 3: Applications Status Tracker (Phase 3C - Real Neon PostgreSQL Data) */}
+      {/* Section 4: Applications Status Tracker (Phase 3C - Real Neon PostgreSQL Data) */}
       <CandidateApplicationsTracker applications={candidateApplications} />
 
-      {/* Section 4: Real Published Jobs Discovery (Phase 3B - Neon PostgreSQL) */}
+      {/* Section 5: Real Published Jobs Discovery (Phase 3B - Neon PostgreSQL) */}
       <CandidateJobDiscovery
         initialJobs={initialPublishedJobs}
         totalCount={totalPublishedCount}

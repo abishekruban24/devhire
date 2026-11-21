@@ -10,6 +10,7 @@ import {
   Database,
   BarChart,
   Lock,
+  LayoutDashboard,
 } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Footer } from "@/components/layout/footer";
@@ -20,6 +21,88 @@ import { Card, CardTitle, CardDescription } from "@/components/ui/card";
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { auth } from "@/auth";
+
+interface HeroUser {
+  name?: string | null;
+  role?: string | null;
+}
+
+function HeroActionButtons({ user }: { user: HeroUser | null }) {
+  if (user) {
+    const isRecruiter = user.role === "RECRUITER";
+    return (
+      <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+        <Link
+          href={isRecruiter ? "/recruiter/dashboard" : "/candidate/dashboard"}
+          className="w-full sm:w-auto"
+        >
+          <Button
+            size="lg"
+            variant={isRecruiter ? "accent" : "default"}
+            className="w-full sm:w-auto text-sm font-semibold gap-2 shadow-lg shadow-blue-600/20 px-8"
+          >
+            <LayoutDashboard className="h-4 w-4" />
+            <span>
+              {isRecruiter ? "Go to Recruiter Suite" : "Go to Candidate Hub"}
+            </span>
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
+      <Link href="/register/candidate" className="w-full sm:w-auto">
+        <Button
+          size="lg"
+          variant="default"
+          className="w-full sm:w-auto text-sm font-semibold gap-2 shadow-lg shadow-blue-600/20"
+        >
+          <UserCheck className="h-4 w-4" />
+          Join as Candidate
+          <ArrowRight className="h-4 w-4" />
+        </Button>
+      </Link>
+
+      <Link href="/register/recruiter" className="w-full sm:w-auto">
+        <Button
+          size="lg"
+          variant="accent"
+          className="w-full sm:w-auto text-sm font-semibold gap-2 shadow-lg shadow-violet-600/20"
+        >
+          <Briefcase className="h-4 w-4" />
+          Hire as Recruiter
+          <ArrowRight className="h-4 w-4" />
+        </Button>
+      </Link>
+    </div>
+  );
+}
+
+async function AuthHeroActions() {
+  await connection();
+  let user = null;
+  try {
+    const session = await auth();
+    user = session?.user ?? null;
+  } catch (error) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "digest" in error &&
+      typeof (error as { digest: string }).digest === "string"
+    ) {
+      throw error;
+    }
+    console.error(
+      "[Homepage AuthHeroActions]: Session resolution encountered an error, falling back to guest view:",
+      error instanceof Error ? error.message : "Authentication error"
+    );
+  }
+  return <HeroActionButtons user={user} />;
+}
 
 async function AuthNavbar() {
   await connection();
@@ -64,7 +147,7 @@ export default function LandingPage() {
               {/* Badge */}
               <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/25 bg-blue-500/10 px-3.5 py-1 text-xs font-semibold text-blue-400 backdrop-blur-sm">
                 <span className="h-2 w-2 rounded-full bg-blue-400 animate-pulse" />
-                DevHire Platform • Phase 1 Project Foundation
+                DevHire Platform • Smart Technical Recruitment
               </div>
 
               {/* Main Heading */}
@@ -82,32 +165,10 @@ export default function LandingPage() {
                 and merit-first talent discovery.
               </p>
 
-              {/* Primary Dual CTAs */}
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-                <Link href="/candidate/dashboard" className="w-full sm:w-auto">
-                  <Button
-                    size="lg"
-                    variant="default"
-                    className="w-full sm:w-auto text-sm font-semibold gap-2 shadow-lg shadow-blue-600/20"
-                  >
-                    <UserCheck className="h-4 w-4" />
-                    For Candidates: Preview Hub
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
-                </Link>
-
-                <Link href="/recruiter/dashboard" className="w-full sm:w-auto">
-                  <Button
-                    size="lg"
-                    variant="accent"
-                    className="w-full sm:w-auto text-sm font-semibold gap-2 shadow-lg shadow-violet-600/20"
-                  >
-                    <Briefcase className="h-4 w-4" />
-                    For Recruiters: Preview Suite
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
-                </Link>
-              </div>
+              {/* Primary Dual CTAs (Option B: Dynamic by Auth State) */}
+              <Suspense fallback={<HeroActionButtons user={null} />}>
+                <AuthHeroActions />
+              </Suspense>
 
               {/* Key Trust Highlights */}
               <div className="pt-6 flex flex-wrap items-center justify-center gap-6 text-xs text-slate-400">
@@ -424,9 +485,9 @@ export default function LandingPage() {
                   </ul>
                 </div>
                 <div className="pt-8">
-                  <Link href="/candidate/dashboard">
+                  <Link href="/register/candidate">
                     <Button variant="default" className="w-full justify-between">
-                      <span>Launch Candidate Preview</span>
+                      <span>Get Started as Candidate</span>
                       <ArrowRight className="h-4 w-4" />
                     </Button>
                   </Link>
@@ -462,9 +523,9 @@ export default function LandingPage() {
                   </ul>
                 </div>
                 <div className="pt-8">
-                  <Link href="/recruiter/dashboard">
+                  <Link href="/register/recruiter">
                     <Button variant="accent" className="w-full justify-between">
-                      <span>Launch Recruiter Preview</span>
+                      <span>Start Hiring as Recruiter</span>
                       <ArrowRight className="h-4 w-4" />
                     </Button>
                   </Link>
