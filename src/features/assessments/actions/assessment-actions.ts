@@ -8,6 +8,7 @@ import {
   type AssessmentStatus,
   type QuestionDifficulty,
   type JobStatus,
+  type Question,
 } from "@prisma/client";
 
 export interface SessionContext {
@@ -962,7 +963,7 @@ export async function upsertQuestion(
 
   try {
     const resultQuestion = await prisma.$transaction(async (tx) => {
-      let qRecord;
+      let qRecord: Question;
 
       if (questionInput.id) {
         // Update existing question
@@ -991,10 +992,25 @@ export async function upsertQuestion(
           },
         });
 
-        // Replace test cases
-        await tx.testCase.deleteMany({
-          where: { questionId: qRecord.id },
-        });
+        // Only replace test cases if explicitly provided
+        if (questionInput.testCases !== undefined) {
+          await tx.testCase.deleteMany({
+            where: { questionId: qRecord.id },
+          });
+
+          if (questionInput.testCases.length > 0) {
+            await tx.testCase.createMany({
+              data: questionInput.testCases.map((tc) => ({
+                questionId: qRecord.id,
+                input: String(tc.input).trim(),
+                expectedOutput: String(tc.expectedOutput).trim(),
+                isHidden: Boolean(tc.isHidden),
+                explanation: tc.explanation ? String(tc.explanation).trim() : null,
+                weight: Number(tc.weight ?? 1.0),
+              })),
+            });
+          }
+        }
       } else {
         // Count existing questions to default orderIndex
         const count = await tx.question.count({
@@ -1016,20 +1032,20 @@ export async function upsertQuestion(
             orderIndex: Number(questionInput.orderIndex ?? count),
           },
         });
-      }
 
-      // Insert new test cases
-      if (testCases.length > 0) {
-        await tx.testCase.createMany({
-          data: testCases.map((tc) => ({
-            questionId: qRecord.id,
-            input: String(tc.input).trim(),
-            expectedOutput: String(tc.expectedOutput).trim(),
-            isHidden: Boolean(tc.isHidden),
-            explanation: tc.explanation ? String(tc.explanation).trim() : null,
-            weight: Number(tc.weight ?? 1.0),
-          })),
-        });
+        // Insert test cases for new question
+        if (testCases.length > 0) {
+          await tx.testCase.createMany({
+            data: testCases.map((tc) => ({
+              questionId: qRecord.id,
+              input: String(tc.input).trim(),
+              expectedOutput: String(tc.expectedOutput).trim(),
+              isHidden: Boolean(tc.isHidden),
+              explanation: tc.explanation ? String(tc.explanation).trim() : null,
+              weight: Number(tc.weight ?? 1.0),
+            })),
+          });
+        }
       }
 
       return qRecord;
