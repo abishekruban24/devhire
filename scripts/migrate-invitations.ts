@@ -116,7 +116,7 @@ async function applyMigration() {
   const migrationContent = fs.readFileSync(migrationFilePath);
   const checksum = crypto.createHash("sha256").update(migrationContent).digest("hex");
 
-  const existingMigration: any[] = await prisma.$queryRawUnsafe(`
+  const existingMigration = await prisma.$queryRawUnsafe<Array<{ id: string }>>(`
     SELECT id FROM "_prisma_migrations" WHERE migration_name = $1
   `, migrationName);
 

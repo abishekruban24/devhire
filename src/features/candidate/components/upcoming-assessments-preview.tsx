@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Clock,
   CheckCircle2,
@@ -17,11 +18,13 @@ import {
   Calendar,
   Ban,
   Layers,
+  Loader2,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { CandidateInvitationItem } from "@/features/assessments/actions/invitation-actions";
+import { startAssessmentAttempt } from "@/features/assessments/actions/attempt-actions";
 import { formatDate } from "@/lib/utils";
 
 interface UpcomingAssessmentsPreviewProps {
@@ -31,8 +34,28 @@ interface UpcomingAssessmentsPreviewProps {
 export function UpcomingAssessmentsPreview({
   initialInvitations = [],
 }: UpcomingAssessmentsPreviewProps) {
+  const router = useRouter();
   const [invitations] = useState<CandidateInvitationItem[]>(initialInvitations);
   const [selectedInvitation, setSelectedInvitation] = useState<CandidateInvitationItem | null>(null);
+  const [isStarting, setIsStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+
+  const handleLaunchAttempt = async (invitation: CandidateInvitationItem) => {
+    setIsStarting(true);
+    setStartError(null);
+    try {
+      const res = await startAssessmentAttempt({ invitationId: invitation.id });
+      if (res.success && res.attemptId) {
+        router.push(`/candidate/assessment/${res.attemptId}`);
+      } else {
+        setStartError(res.message || "Failed to start assessment attempt.");
+      }
+    } catch {
+      setStartError("An unexpected error occurred while starting the assessment.");
+    } finally {
+      setIsStarting(false);
+    }
+  };
 
   const getStatusBadge = (status: string, expiresAt?: string | null) => {
     const isExpired = expiresAt && new Date(expiresAt) < new Date();
@@ -290,32 +313,82 @@ export function UpcomingAssessmentsPreview({
                 </p>
               </div>
 
-              {/* Ground Rules & Phase 4C Note */}
+              {/* Error message */}
+              {startError && (
+                <div className="rounded-xl border border-rose-500/40 bg-rose-950/40 p-3.5 text-xs text-rose-200 flex items-center gap-2.5">
+                  <AlertCircle className="h-4 w-4 text-rose-400 shrink-0" />
+                  <span>{startError}</span>
+                </div>
+              )}
+
+              {/* Ground Rules & Guidelines */}
               <div className="rounded-xl border border-blue-500/30 bg-blue-950/20 p-4 space-y-2 text-xs">
                 <div className="flex items-center gap-2 font-semibold text-blue-300">
                   <ShieldCheck className="h-4 w-4 text-blue-400 shrink-0" />
-                  <span>Proctored Assessment Ground Rules</span>
+                  <span>Timed Assessment Ground Rules</span>
                 </div>
                 <ul className="list-disc pl-5 space-y-1 text-slate-300 text-[11px] leading-relaxed">
-                  <li>Your invitation is verified on the secure database ledger.</li>
-                  <li>Coding problems, starter code templates (TypeScript/Python), and real-time execution will activate in Phase 4C.</li>
-                  <li>Hidden evaluation test cases are kept strictly private until submission evaluation.</li>
+                  <li>Your official countdown starts immediately upon clicking Begin Assessment and cannot be paused.</li>
+                  <li>Coding problems, Monaco code editor, Python/TypeScript templates, and visible sample test cases are active.</li>
+                  <li>Your draft code autosaves continuously to the server database as you type.</li>
+                  <li>Hidden evaluation test cases remain private until official recruiter evaluation.</li>
                 </ul>
               </div>
             </div>
 
             {/* Modal Footer */}
             <div className="p-4 sm:p-5 border-t border-slate-800/80 bg-[#0E1526]/90 flex items-center justify-between gap-3">
-              <span className="text-[11px] text-slate-500">
-                Invitation ID: {selectedInvitation.id.slice(0, 8)}...
-              </span>
               <Button
+                variant="outline"
                 size="sm"
-                onClick={() => setSelectedInvitation(null)}
-                className="bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs"
+                onClick={() => {
+                  setSelectedInvitation(null);
+                  setStartError(null);
+                }}
+                disabled={isStarting}
+                className="border-slate-700 bg-slate-800/60 hover:bg-slate-800 text-slate-300 text-xs"
               >
-                Close Overview
+                Close
               </Button>
+              {selectedInvitation.status === "STARTED" ? (
+                <Button
+                  size="sm"
+                  onClick={() => handleLaunchAttempt(selectedInvitation)}
+                  disabled={isStarting}
+                  className="bg-amber-600 hover:bg-amber-500 text-white font-medium text-xs flex items-center gap-1.5"
+                >
+                  {isStarting ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Loading Workspace...
+                    </>
+                  ) : (
+                    <>
+                      <PlayCircle className="h-3.5 w-3.5" />
+                      Resume Challenge
+                    </>
+                  )}
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  onClick={() => handleLaunchAttempt(selectedInvitation)}
+                  disabled={isStarting}
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs flex items-center gap-1.5 shadow-md shadow-blue-900/30"
+                >
+                  {isStarting ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Starting Attempt...
+                    </>
+                  ) : (
+                    <>
+                      <span>Begin Timed Assessment</span>
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           </div>
         </div>

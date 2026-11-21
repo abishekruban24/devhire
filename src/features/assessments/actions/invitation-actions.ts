@@ -43,6 +43,7 @@ export interface RecruiterInvitationItem {
 
 export interface CandidateInvitationItem {
   id: string;
+  attemptId?: string | null;
   assessmentId: string;
   assessmentTitle: string;
   assessmentDescription: string;
@@ -659,12 +660,21 @@ export async function getCandidateInvitations(
             },
           },
         },
+        attempts: {
+          select: {
+            id: true,
+            status: true,
+          },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
       },
       orderBy: { createdAt: "desc" },
     });
 
     const invitations: CandidateInvitationItem[] = items.map((inv) => ({
       id: inv.id,
+      attemptId: inv.attempts[0]?.id || null,
       assessmentId: inv.assessment.id,
       assessmentTitle: inv.assessment.title,
       assessmentDescription: inv.assessment.description,
