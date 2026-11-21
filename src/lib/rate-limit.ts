@@ -88,10 +88,11 @@ export async function rateLimit(
   const { url: upstashUrl, token: upstashToken } = getUpstashConfig();
 
   // 1. Distributed Rate Limiting via Upstash Redis REST API
+  // Uses /multi-exec (Redis MULTI/EXEC transaction) to guarantee atomic execution of INCR, EXPIRE NX, and TTL without command interleaving.
   if (upstashUrl && upstashToken) {
     try {
       const windowSeconds = Math.ceil(windowMs / 1000);
-      const pipelineRes = await fetch(`${upstashUrl}/pipeline`, {
+      const execRes = await fetch(`${upstashUrl}/multi-exec`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${upstashToken}`,
@@ -105,8 +106,8 @@ export async function rateLimit(
         cache: "no-store",
       });
 
-      if (pipelineRes.ok) {
-        const data = await pipelineRes.json();
+      if (execRes.ok) {
+        const data = await execRes.json();
         const count = Number(data[0]?.result ?? 1);
         const remaining = Math.max(0, limit - count);
         const ttlSeconds = Number(data[2]?.result ?? windowSeconds);
@@ -125,9 +126,9 @@ export async function rateLimit(
             : `Too many attempts. Please wait ${Math.ceil(resetMs / 60000)} minutes before trying again.`,
         };
       } else {
-        const isAuthError = pipelineRes.status === 401 || pipelineRes.status === 403;
+        const isAuthError = execRes.status === 401 || execRes.status === 403;
         console.error(
-          `[RateLimit Error]: Upstash Redis returned HTTP ${pipelineRes.status}${
+          `[RateLimit Error]: Upstash Redis returned HTTP ${execRes.status}${
             isAuthError ? " (Unauthorized / Forbidden: Check UPSTASH_REDIS_REST_TOKEN)" : ""
           }`
         );

@@ -1,3 +1,4 @@
+import "./local-dns-preload.cjs";
 import "dotenv/config";
 import { prisma } from "../src/lib/prisma";
 import { registerCandidate, registerRecruiter } from "../src/features/auth/actions/register";

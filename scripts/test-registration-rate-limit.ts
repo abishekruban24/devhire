@@ -1,6 +1,5 @@
+import "./local-dns-preload.cjs";
 import "dotenv/config";
-import dns from "node:dns";
-dns.setServers(["8.8.8.8", "1.1.1.1"]);
 import { prisma } from "../src/lib/prisma";
 import { registerCandidate, registerRecruiter } from "../src/features/auth/actions/register";
 import { rateLimit, resetRateLimit } from "../src/lib/rate-limit";
