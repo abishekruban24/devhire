@@ -2,18 +2,19 @@ import React from "react";
 import { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { MockDataBanner } from "@/components/ui/mock-banner";
 import { ProfileOverviewCard } from "@/features/candidate/components/profile-overview-card";
-import { AvailableJobsPreview } from "@/features/candidate/components/available-jobs-preview";
+import { CandidateJobDiscovery } from "@/features/candidate/components/candidate-job-discovery";
 import { UpcomingAssessmentsPreview } from "@/features/candidate/components/upcoming-assessments-preview";
 import { ApplicationStatusPreview } from "@/features/candidate/components/application-status-preview";
 import {
   MOCK_CANDIDATE_PROFILE,
   MOCK_CANDIDATE_APPLICATIONS,
 } from "@/features/candidate/data/mock-candidate";
-import { MOCK_JOBS } from "@/features/jobs/data/mock-jobs";
 import { MOCK_ASSESSMENTS } from "@/features/assessments/data/mock-assessments";
+import type { PublishedJobItem } from "@/features/jobs/actions/job-actions";
 
 export const metadata: Metadata = {
   title: "Candidate Dashboard | DevHire",
@@ -53,6 +54,60 @@ export default async function CandidateDashboardPage() {
     redirect("/recruiter/dashboard");
   }
 
+  // 3. Fetch real published jobs from Neon PostgreSQL
+  let initialPublishedJobs: PublishedJobItem[] = [];
+  let totalPublishedCount = 0;
+
+  try {
+    const [fetchedJobs, count] = await Promise.all([
+      prisma.job.findMany({
+        where: {
+          status: "PUBLISHED", // STRICT SECURITY: Only display PUBLISHED jobs to candidates
+        },
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+          description: true,
+          requirements: true,
+          location: true,
+          locationType: true,
+          type: true,
+          status: true,
+          salaryMin: true,
+          salaryMax: true,
+          currency: true,
+          experienceLevel: true,
+          createdAt: true,
+          company: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              logoUrl: true,
+              location: true,
+              industry: true,
+              website: true,
+              description: true,
+            },
+          },
+          _count: {
+            select: { applications: true },
+          },
+        },
+        orderBy: { createdAt: "desc" }, // Sort newest published jobs first
+      }),
+      prisma.job.count({
+        where: { status: "PUBLISHED" },
+      }),
+    ]);
+
+    initialPublishedJobs = fetchedJobs as unknown as PublishedJobItem[];
+    totalPublishedCount = count;
+  } catch (err) {
+    console.error("[Candidate Dashboard]: Failed to fetch published jobs from database:", err);
+  }
+
   // Personalize candidate profile with authenticated session details
   const personalizedProfile = {
     ...MOCK_CANDIDATE_PROFILE,
@@ -71,20 +126,23 @@ export default async function CandidateDashboardPage() {
         href: "#jobs",
       }}
     >
-      {/* Explicit Mock Data Notice */}
+      {/* Explicit Mock Data Notice for Assessments/Applications (Phases 3C & 4) */}
       <MockDataBanner role="Candidate" />
 
       {/* Section 1: Candidate Profile Overview */}
       <ProfileOverviewCard profile={personalizedProfile} />
 
-      {/* Section 2: Technical Assessments Preview */}
+      {/* Section 2: Technical Assessments Preview (Phase 4) */}
       <UpcomingAssessmentsPreview assessments={MOCK_ASSESSMENTS} />
 
-      {/* Section 3: Applications Status Preview */}
+      {/* Section 3: Applications Status Preview (Phase 3C) */}
       <ApplicationStatusPreview applications={MOCK_CANDIDATE_APPLICATIONS} />
 
-      {/* Section 4: Available Jobs Preview */}
-      <AvailableJobsPreview jobs={MOCK_JOBS} />
+      {/* Section 4: Real Published Jobs Discovery (Phase 3B - Neon PostgreSQL) */}
+      <CandidateJobDiscovery
+        initialJobs={initialPublishedJobs}
+        totalCount={totalPublishedCount}
+      />
     </DashboardLayout>
   );
 }

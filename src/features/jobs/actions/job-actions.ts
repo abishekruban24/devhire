@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import type { JobLocationType, JobType, JobStatus } from "@prisma/client";
+import type { JobLocationType, JobType, JobStatus, Prisma } from "@prisma/client";
 
 export interface JobActionResult {
   success: boolean;
@@ -536,5 +536,308 @@ export async function getCompanyJobs(sessionOverride?: SessionContext | null) {
   } catch (err) {
     console.error("[Get Company Jobs Error]:", err);
     return { success: false, error: "Failed to retrieve company jobs.", jobs: [] };
+  }
+}
+
+// -----------------------------------------------------------------------------
+// PHASE 3B: CANDIDATE JOB DISCOVERY ACTIONS & TYPES
+// -----------------------------------------------------------------------------
+
+export interface PublishedJobCompany {
+  id: string;
+  name: string;
+  slug: string;
+  logoUrl?: string | null;
+  location?: string | null;
+  industry?: string | null;
+  website?: string | null;
+  description?: string | null;
+}
+
+export interface PublishedJobItem {
+  id: string;
+  title: string;
+  slug: string;
+  description: string;
+  requirements: string;
+  location: string;
+  locationType: JobLocationType;
+  type: JobType;
+  status: JobStatus;
+  salaryMin?: number | null;
+  salaryMax?: number | null;
+  currency: string;
+  experienceLevel?: string | null;
+  createdAt: Date | string;
+  updatedAt?: Date | string;
+  company: PublishedJobCompany;
+  _count?: {
+    applications: number;
+  };
+}
+
+export interface JobFilterParams {
+  search?: string;
+  type?: JobType | "ALL";
+  locationType?: JobLocationType | "ALL";
+  experienceLevel?: string | "ALL";
+  page?: number;
+  pageSize?: number;
+}
+
+export interface PublishedJobsResult {
+  success: boolean;
+  message?: string;
+  jobs: PublishedJobItem[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+/**
+ * Server-side security check: verifies authenticated candidate.
+ * Strictly blocks unauthenticated users and non-candidates (e.g. recruiters).
+ */
+export async function authenticateCandidate(sessionOverride?: SessionContext | null) {
+  const session = sessionOverride !== undefined ? sessionOverride : await auth();
+
+  if (!session?.user?.id) {
+    return {
+      authenticated: false,
+      error: "Authentication required. Please sign in to browse open technical roles.",
+    };
+  }
+
+  if (session.user.role !== "CANDIDATE") {
+    return {
+      authenticated: false,
+      error: "Access denied. Candidate privileges required to access candidate job discovery.",
+    };
+  }
+
+  return {
+    authenticated: true,
+    user: session.user,
+  };
+}
+
+/**
+ * Retrieve published jobs for candidates with server-side filtering, searching, and pagination.
+ * STRICT SECURITY: Only jobs with status PUBLISHED are ever returned.
+ * Draft, Closed, and Archived jobs are completely excluded.
+ */
+export async function getPublishedJobs(
+  filters?: JobFilterParams,
+  sessionOverride?: SessionContext | null
+): Promise<PublishedJobsResult> {
+  const authCheck = await authenticateCandidate(sessionOverride);
+  if (!authCheck.authenticated) {
+    return {
+      success: false,
+      message: authCheck.error || "Authentication required.",
+      jobs: [],
+      totalCount: 0,
+      page: 1,
+      pageSize: 10,
+      totalPages: 0,
+    };
+  }
+
+  try {
+    const page = Math.max(1, Math.floor(Number(filters?.page) || 1));
+    const pageSize = Math.min(50, Math.max(1, Math.floor(Number(filters?.pageSize) || 10)));
+    const search = filters?.search ? String(filters.search).trim().slice(0, 100) : "";
+    const type =
+      filters?.type && filters.type !== "ALL" && VALID_JOB_TYPES.includes(filters.type as JobType)
+        ? (filters.type as JobType)
+        : undefined;
+    const locationType =
+      filters?.locationType &&
+      filters.locationType !== "ALL" &&
+      VALID_LOCATION_TYPES.includes(filters.locationType as JobLocationType)
+        ? (filters.locationType as JobLocationType)
+        : undefined;
+    const experienceLevel =
+      filters?.experienceLevel && filters.experienceLevel !== "ALL"
+        ? String(filters.experienceLevel).trim().slice(0, 50)
+        : undefined;
+
+    const where: Prisma.JobWhereInput = {
+      status: "PUBLISHED", // STRICT SECURITY: Never display DRAFT, CLOSED, or ARCHIVED jobs
+    };
+
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: "insensitive" } },
+        { location: { contains: search, mode: "insensitive" } },
+        { description: { contains: search, mode: "insensitive" } },
+        { requirements: { contains: search, mode: "insensitive" } },
+        { company: { name: { contains: search, mode: "insensitive" } } },
+      ];
+    }
+
+    if (type) {
+      where.type = type;
+    }
+
+    if (locationType) {
+      where.locationType = locationType;
+    }
+
+    if (experienceLevel) {
+      where.experienceLevel = { contains: experienceLevel, mode: "insensitive" };
+    }
+
+    const [totalCount, rawJobs] = await Promise.all([
+      prisma.job.count({ where }),
+      prisma.job.findMany({
+        where,
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+          description: true,
+          requirements: true,
+          location: true,
+          locationType: true,
+          type: true,
+          status: true,
+          salaryMin: true,
+          salaryMax: true,
+          currency: true,
+          experienceLevel: true,
+          createdAt: true,
+          company: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              logoUrl: true,
+              location: true,
+              industry: true,
+              website: true,
+            },
+          },
+          _count: {
+            select: { applications: true },
+          },
+        },
+        orderBy: { createdAt: "desc" }, // Newest published jobs first
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
+    return {
+      success: true,
+      jobs: rawJobs as unknown as PublishedJobItem[],
+      totalCount,
+      page,
+      pageSize,
+      totalPages,
+    };
+  } catch (err) {
+    console.error("[Get Published Jobs Server Action Error]:", err);
+    return {
+      success: false,
+      message: "An unexpected error occurred while retrieving published job listings.",
+      jobs: [],
+      totalCount: 0,
+      page: 1,
+      pageSize: 10,
+      totalPages: 0,
+    };
+  }
+}
+
+/**
+ * Retrieve a single published job opening by ID for detailed inspection.
+ * STRICT SECURITY: Rejects access if the job is not in PUBLISHED status (blocks DRAFT, CLOSED, ARCHIVED).
+ * Never exposes private recruiter credentials or internal notes.
+ */
+export async function getPublishedJobById(
+  jobId: string,
+  sessionOverride?: SessionContext | null
+): Promise<{
+  success: boolean;
+  message?: string;
+  job?: PublishedJobItem | null;
+}> {
+  const authCheck = await authenticateCandidate(sessionOverride);
+  if (!authCheck.authenticated) {
+    return {
+      success: false,
+      message: authCheck.error || "Authentication required.",
+    };
+  }
+
+  const cleanId = String(jobId || "").trim();
+  if (!cleanId) {
+    return {
+      success: false,
+      message: "A valid job ID must be provided.",
+    };
+  }
+
+  try {
+    const rawJob = await prisma.job.findFirst({
+      where: {
+        id: cleanId,
+        status: "PUBLISHED", // STRICT SECURITY: Blocks guessed IDs of DRAFT, CLOSED, or ARCHIVED jobs
+      },
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        description: true,
+        requirements: true,
+        location: true,
+        locationType: true,
+        type: true,
+        status: true,
+        salaryMin: true,
+        salaryMax: true,
+        currency: true,
+        experienceLevel: true,
+        createdAt: true,
+        updatedAt: true,
+        company: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            logoUrl: true,
+            location: true,
+            industry: true,
+            website: true,
+            description: true,
+          },
+        },
+        _count: {
+          select: { applications: true },
+        },
+      },
+    });
+
+    if (!rawJob) {
+      return {
+        success: false,
+        message: "Job opening not found or is no longer accepting applications.",
+      };
+    }
+
+    return {
+      success: true,
+      job: rawJob as unknown as PublishedJobItem,
+    };
+  } catch (err) {
+    console.error("[Get Published Job By ID Server Action Error]:", err);
+    return {
+      success: false,
+      message: "An unexpected error occurred while retrieving job details.",
+    };
   }
 }
