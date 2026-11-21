@@ -5,7 +5,7 @@ import { MOCK_ASSESSMENT_METRICS } from "@/features/recruiter/data/mock-recruite
 
 export function AssessmentStatisticsPreview() {
   return (
-    <div className="space-y-4" id="assessments">
+    <div className="space-y-4" id="assessment-analytics">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-bold text-white tracking-tight">Assessment Statistics & Benchmarks</h2>

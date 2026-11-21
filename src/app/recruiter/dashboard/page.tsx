@@ -8,9 +8,11 @@ import { MockDataBanner } from "@/components/ui/mock-banner";
 import { HiringOverviewMetrics } from "@/features/recruiter/components/hiring-overview-metrics";
 import { RecruiterJobManagement, type DatabaseJobItem } from "@/features/recruiter/components/recruiter-job-management";
 import { RecruiterApplicantManagement } from "@/features/recruiter/components/recruiter-applicant-management";
+import { RecruiterAssessmentManagement } from "@/features/recruiter/components/recruiter-assessment-management";
 import { AssessmentStatisticsPreview } from "@/features/recruiter/components/assessment-statistics-preview";
 import { MOCK_RECRUITER_COMPANY } from "@/features/recruiter/data/mock-recruiter";
 import type { RecruiterApplicantItem } from "@/features/applications/actions/application-actions";
+import type { RecruiterAssessmentItem } from "@/features/assessments/actions/assessment-actions";
 
 export const metadata: Metadata = {
   title: "Recruiter Dashboard | DevHire",
@@ -50,9 +52,10 @@ export default async function RecruiterDashboardPage() {
     redirect("/candidate/dashboard");
   }
 
-  // 3. Fetch real recruiter user, company profile, company jobs, and candidate applications from Neon PostgreSQL
+  // 3. Fetch real recruiter user, company profile, jobs, applications, and assessments from Neon PostgreSQL
   let companyJobs: DatabaseJobItem[] = [];
   let companyApplications: RecruiterApplicantItem[] = [];
+  let companyAssessments: RecruiterAssessmentItem[] = [];
   let companyName = session.user.companyName || MOCK_RECRUITER_COMPANY.name;
 
   if (session.user.id) {
@@ -75,7 +78,7 @@ export default async function RecruiterDashboardPage() {
       }
 
       if (dbUser?.companyId) {
-        const [fetchedJobs, fetchedApplications] = await Promise.all([
+        const [fetchedJobs, fetchedApplications, fetchedAssessments] = await Promise.all([
           prisma.job.findMany({
             where: { companyId: dbUser.companyId },
             include: {
@@ -126,13 +129,83 @@ export default async function RecruiterDashboardPage() {
             },
             orderBy: { createdAt: "desc" },
           }),
+          prisma.assessment.findMany({
+            where: {
+              companyId: dbUser.companyId,
+            },
+            select: {
+              id: true,
+              title: true,
+              description: true,
+              durationMinutes: true,
+              passingScore: true,
+              status: true,
+              companyId: true,
+              creatorId: true,
+              creator: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+              jobs: {
+                select: {
+                  id: true,
+                  title: true,
+                  slug: true,
+                  status: true,
+                },
+              },
+              questions: {
+                select: {
+                  id: true,
+                  assessmentId: true,
+                  title: true,
+                  description: true,
+                  difficulty: true,
+                  points: true,
+                  timeLimitMs: true,
+                  memoryLimitKb: true,
+                  starterCode: true,
+                  orderIndex: true,
+                  testCases: {
+                    select: {
+                      id: true,
+                      questionId: true,
+                      input: true,
+                      expectedOutput: true,
+                      isHidden: true,
+                      explanation: true,
+                      weight: true,
+                      createdAt: true,
+                    },
+                    orderBy: { createdAt: "asc" },
+                  },
+                  createdAt: true,
+                },
+                orderBy: { orderIndex: "asc" },
+              },
+              _count: {
+                select: {
+                  questions: true,
+                  attempts: true,
+                  jobs: true,
+                },
+              },
+              createdAt: true,
+              updatedAt: true,
+            },
+            orderBy: { createdAt: "desc" },
+          }),
         ]);
 
         companyJobs = fetchedJobs as unknown as DatabaseJobItem[];
         companyApplications = fetchedApplications as unknown as RecruiterApplicantItem[];
+        companyAssessments = fetchedAssessments as unknown as RecruiterAssessmentItem[];
       }
     } catch (err) {
-      console.error("[Recruiter Dashboard]: Failed to fetch company jobs and applications from database:", err);
+      console.error("[Recruiter Dashboard]: Failed to fetch company jobs, applications, and assessments from database:", err);
     }
   }
 
@@ -183,7 +256,13 @@ export default async function RecruiterDashboardPage() {
         companyJobs={companyJobs.map((j) => ({ id: j.id, title: j.title }))}
       />
 
-      {/* Section 4: Assessment Statistics & Domain Pass Rates (Phase 4) */}
+      {/* Section 4: Technical Assessment Library & Creator (Phase 4A - Real Neon PostgreSQL Data) */}
+      <RecruiterAssessmentManagement
+        initialAssessments={companyAssessments}
+        companyJobs={companyJobs.map((j) => ({ id: j.id, title: j.title }))}
+      />
+
+      {/* Section 5: Assessment Statistics & Domain Pass Rates */}
       <AssessmentStatisticsPreview />
     </DashboardLayout>
   );
