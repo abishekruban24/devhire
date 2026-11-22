@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { registerCandidate } from "@/features/auth/actions/register";
+import { signOut } from "next-auth/react";
 
 export default function CandidateRegisterPage() {
   const router = useRouter();
@@ -45,9 +46,17 @@ export default function CandidateRegisterPage() {
           setFormError(res.message);
         }
       } else {
+        // Clear any previous session so the newly registered user doesn't inherit a stale session
+        try {
+          await signOut({ redirect: false });
+        } catch {
+          // Ignore error if no session existed
+        }
+
         setSuccessMessage("Candidate profile created successfully! Redirecting to login...");
         setTimeout(() => {
-          router.push("/login?registered=candidate");
+          const target = `/login?registered=candidate&email=${encodeURIComponent(email)}&switch=true`;
+          router.push(target);
         }, 1200);
       }
     });

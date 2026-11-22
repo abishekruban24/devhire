@@ -55,13 +55,39 @@ export default async function RecruiterDashboardPage() {
   }
 
   // 1. Require authenticated session
-  if (!session?.user) {
+  if (!session?.user?.id) {
     redirect("/login?callbackUrl=/recruiter/dashboard");
   }
 
-  // 2. Enforce role separation: Candidates redirected to candidate hub
-  if (session.user.role === "CANDIDATE") {
+  // 2. Database-authoritative role verification: Prevent any session bleed or stale token impersonation
+  const dbUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      companyId: true,
+      company: {
+        select: {
+          name: true,
+        },
+      },
+    },
+  });
+
+  if (!dbUser) {
+    redirect("/login?callbackUrl=/recruiter/dashboard&error=UserNotFound");
+  }
+
+  // Strict role separation: Candidates redirected to candidate hub
+  if (dbUser.role === "CANDIDATE") {
     redirect("/candidate/dashboard");
+  }
+
+  // Fail closed: User must strictly have role RECRUITER
+  if (dbUser.role !== "RECRUITER") {
+    redirect("/login?error=AccessDenied");
   }
 
   // 3. Fetch real recruiter user, company profile, jobs, applications, assessments, and invitations from Neon PostgreSQL
@@ -71,30 +97,12 @@ export default async function RecruiterDashboardPage() {
   let companyInvitations: RecruiterInvitationItem[] = [];
   let reviewSubmissions: RecruiterSubmissionItem[] = [];
   let reviewCounts = { total: 0, awaitingReview: 0, draftSaved: 0, published: 0 };
-  let companyName = session.user.companyName || "Acme Technical Labs";
+  const companyName = dbUser.company?.name || session.user.companyName || "Acme Technical Labs";
 
-  if (session.user.id) {
+  if (dbUser.companyId) {
     try {
-      const dbUser = await prisma.user.findUnique({
-        where: { id: session.user.id },
-        select: {
-          id: true,
-          companyId: true,
-          company: {
-            select: {
-              name: true,
-            },
-          },
-        },
-      });
-
-      if (dbUser?.company?.name) {
-        companyName = dbUser.company.name;
-      }
-
-      if (dbUser?.companyId) {
-        const [fetchedJobs, fetchedApplications, fetchedAssessments, reviewRes, invRes] =
-          await Promise.all([
+      const [fetchedJobs, fetchedApplications, fetchedAssessments, reviewRes, invRes] =
+        await Promise.all([
             prisma.job.findMany({
               where: { companyId: dbUser.companyId },
               include: {
@@ -230,14 +238,13 @@ export default async function RecruiterDashboardPage() {
         if (invRes.success) {
           companyInvitations = invRes.invitations;
         }
+      } catch (err) {
+        console.error(
+          "[Recruiter Dashboard]: Failed to fetch company jobs, applications, assessments, and reviews from database:",
+          err
+        );
       }
-    } catch (err) {
-      console.error(
-        "[Recruiter Dashboard]: Failed to fetch company jobs, applications, assessments, and reviews from database:",
-        err
-      );
     }
-  }
 
   const publishedJobsCount = companyJobs.filter((j) => j.status === "PUBLISHED").length;
   const totalApplicantsCount = companyApplications.length;

@@ -14,7 +14,6 @@ const authMiddleware = auth((req) => {
 
   const isCandidateRoute = pathname.startsWith("/candidate");
   const isRecruiterRoute = pathname.startsWith("/recruiter");
-  const isAuthRoute = pathname === "/login" || pathname.startsWith("/register");
 
   // 1. If trying to access protected dashboards while not logged in, redirect to /login
   if ((isCandidateRoute || isRecruiterRoute) && !isLoggedIn) {
@@ -22,23 +21,32 @@ const authMiddleware = auth((req) => {
     return NextResponse.redirect(new URL(`/login?callbackUrl=${callbackUrl}`, nextUrl));
   }
 
-  // 2. Role-based protection:
-  // Candidate trying to access recruiter dashboard
-  if (isRecruiterRoute && userRole === "CANDIDATE") {
-    return NextResponse.redirect(new URL("/candidate/dashboard", nextUrl));
+  // 2. Role-based protection on protected routes (fails closed for invalid or unknown roles)
+  if (isRecruiterRoute && userRole !== "RECRUITER") {
+    if (userRole === "CANDIDATE") {
+      return NextResponse.redirect(new URL("/candidate/dashboard", nextUrl));
+    }
+    return NextResponse.redirect(new URL("/login?error=AccessDenied", nextUrl));
   }
 
-  // Recruiter trying to access candidate dashboard
-  if (isCandidateRoute && userRole === "RECRUITER") {
-    return NextResponse.redirect(new URL("/recruiter/dashboard", nextUrl));
-  }
-
-  // 3. If logged in and visiting /login or /register, redirect to appropriate dashboard
-  if (isAuthRoute && isLoggedIn) {
+  if (isCandidateRoute && userRole !== "CANDIDATE") {
     if (userRole === "RECRUITER") {
       return NextResponse.redirect(new URL("/recruiter/dashboard", nextUrl));
     }
-    return NextResponse.redirect(new URL("/candidate/dashboard", nextUrl));
+    return NextResponse.redirect(new URL("/login?error=AccessDenied", nextUrl));
+  }
+
+  // 3. Only on public /login: if logged in and NOT switching accounts or showing an error, redirect to dashboard
+  const isSwitchingAccount =
+    nextUrl.searchParams.has("switch") || nextUrl.searchParams.has("registered");
+
+  if (pathname === "/login" && isLoggedIn && !isSwitchingAccount && !nextUrl.searchParams.has("error")) {
+    if (userRole === "RECRUITER") {
+      return NextResponse.redirect(new URL("/recruiter/dashboard", nextUrl));
+    }
+    if (userRole === "CANDIDATE") {
+      return NextResponse.redirect(new URL("/candidate/dashboard", nextUrl));
+    }
   }
 
   return NextResponse.next();

@@ -53,13 +53,28 @@ export default async function CandidateDashboardPage() {
   }
 
   // 1. Require authenticated session
-  if (!session?.user) {
+  if (!session?.user?.id) {
     redirect("/login?callbackUrl=/candidate/dashboard");
   }
 
-  // 2. Enforce role separation: Recruiters redirected to recruiter suite
-  if (session.user.role === "RECRUITER") {
+  // 2. Database-authoritative role verification: Prevent any session bleed or stale token impersonation
+  const dbUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, role: true, name: true, email: true },
+  });
+
+  if (!dbUser) {
+    redirect("/login?callbackUrl=/candidate/dashboard&error=UserNotFound");
+  }
+
+  // Strict role separation: Recruiters redirected to recruiter suite
+  if (dbUser.role === "RECRUITER") {
     redirect("/recruiter/dashboard");
+  }
+
+  // Fail closed: User must strictly have role CANDIDATE
+  if (dbUser.role !== "CANDIDATE") {
+    redirect("/login?error=AccessDenied");
   }
 
   // 3. Fetch real published jobs from Neon PostgreSQL
@@ -154,8 +169,8 @@ export default async function CandidateDashboardPage() {
   // Personalize candidate profile with authenticated session details
   const personalizedProfile = {
     ...MOCK_CANDIDATE_PROFILE,
-    name: session.user.name || MOCK_CANDIDATE_PROFILE.name,
-    email: session.user.email || MOCK_CANDIDATE_PROFILE.email,
+    name: dbUser.name || session.user.name || MOCK_CANDIDATE_PROFILE.name,
+    email: dbUser.email || session.user.email || MOCK_CANDIDATE_PROFILE.email,
   };
 
   return (

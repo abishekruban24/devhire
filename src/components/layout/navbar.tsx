@@ -106,24 +106,15 @@ export function Navbar({ user }: NavbarProps) {
         {/* Action CTAs */}
         <div className="hidden md:flex items-center gap-3">
           {user ? (
-            <>
-              <Link href={dashboardHref}>
-                <Button variant="default" size="sm" className="group gap-1.5">
-                  <LayoutDashboard className="h-3.5 w-3.5" />
-                  <span>Go to Dashboard</span>
-                  <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-                </Button>
-              </Link>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSignOut}
-                className="border-slate-700/80 hover:border-rose-500/50 hover:text-rose-400 text-slate-300 gap-1.5"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-                <span>Sign Out</span>
-              </Button>
-            </>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSignOut}
+              className="border-slate-700/80 hover:border-rose-500/50 hover:text-rose-400 text-slate-300 gap-1.5"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              <span>Sign Out</span>
+            </Button>
           ) : (
             <>
               <Link href="/login">
@@ -216,25 +207,17 @@ export function Navbar({ user }: NavbarProps) {
           </div>
           <div className="pt-2 border-t border-slate-800 flex flex-col gap-2">
             {user ? (
-              <>
-                <Link href={dashboardHref} onClick={() => setMobileMenuOpen(false)}>
-                  <Button variant="default" className="w-full justify-center gap-2">
-                    <LayoutDashboard className="h-4 w-4" />
-                    <span>Go to Dashboard</span>
-                  </Button>
-                </Link>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    handleSignOut();
-                  }}
-                  className="w-full justify-center gap-2 text-rose-400 border-slate-800"
-                >
-                  <LogOut className="h-4 w-4" />
-                  <span>Sign Out</span>
-                </Button>
-              </>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  handleSignOut();
+                }}
+                className="w-full justify-center gap-2 text-rose-400 border-slate-800"
+              >
+                <LogOut className="h-4 w-4" />
+                <span>Sign Out</span>
+              </Button>
             ) : (
               <>
                 <Link href="/login" onClick={() => setMobileMenuOpen(false)}>

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { registerRecruiter } from "@/features/auth/actions/register";
+import { signOut } from "next-auth/react";
 
 export default function RecruiterRegisterPage() {
   const router = useRouter();
@@ -47,9 +48,17 @@ export default function RecruiterRegisterPage() {
           setFormError(res.message);
         }
       } else {
+        // Clear any previous session so the newly registered user doesn't inherit a stale session
+        try {
+          await signOut({ redirect: false });
+        } catch {
+          // Ignore error if no session existed
+        }
+
         setSuccessMessage("Recruiter account and company workspace created! Redirecting to login...");
         setTimeout(() => {
-          router.push("/login?registered=recruiter");
+          const target = `/login?registered=recruiter&email=${encodeURIComponent(email)}&switch=true`;
+          router.push(target);
         }, 1200);
       }
     });

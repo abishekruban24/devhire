@@ -2,7 +2,7 @@
 
 import React, { useState, useTransition, Suspense } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import {
   Terminal,
@@ -19,14 +19,30 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
+import { getAuthenticatedUserRole } from "@/features/auth/actions/auth-actions";
+
+function isSafeInternalCallback(url: string | null): url is string {
+  if (!url) return false;
+  // Must start with single forward slash, no backslashes, no double slashes, no protocol
+  if (!url.startsWith("/") || url.startsWith("//") || url.startsWith("/\\") || url.includes("://")) {
+    return false;
+  }
+  try {
+    const parsed = new URL(url, "https://devhire.local");
+    return parsed.origin === "https://devhire.local";
+  } catch {
+    return false;
+  }
+}
+
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl");
   const registered = searchParams.get("registered");
+  const initialEmail = searchParams.get("email");
 
   const [isPending, startTransition] = useTransition();
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(initialEmail || "");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -45,6 +61,7 @@ function LoginForm() {
 
     startTransition(async () => {
       try {
+        // 1. Authenticate credentials first (prevents unauthenticated user/role enumeration)
         const res = await signIn("credentials", {
           email: cleanEmail,
           password,
@@ -64,30 +81,33 @@ function LoginForm() {
           return;
         }
 
-        // Successfully signed in - fetch session to determine role-based destination
+        // 2. Credentials valid - display success feedback
         setSuccessMessage("Authentication verified. Redirecting to your dashboard...");
 
-        const sessionRes = await fetch("/api/auth/session");
-        const sessionData = await sessionRes.json().catch(() => null);
-        const userRole = sessionData?.user?.role;
+        // 3. Resolve user role authoritatively from the authenticated server session
+        const authRoleRes = await getAuthenticatedUserRole();
 
-        let targetUrl = userRole === "RECRUITER" ? "/recruiter/dashboard" : "/candidate/dashboard";
+        let targetUrl = "/auth/redirect";
 
-        // If a valid relative callbackUrl was specified and compatible with role
-        if (callbackUrl && callbackUrl.startsWith("/") && !callbackUrl.startsWith("//")) {
-          const isCandidateRoute = callbackUrl.startsWith("/candidate");
-          const isRecruiterRoute = callbackUrl.startsWith("/recruiter");
+        if (authRoleRes.success && authRoleRes.role) {
+          const userRole = authRoleRes.role;
+          targetUrl = userRole === "RECRUITER" ? "/recruiter/dashboard" : "/candidate/dashboard";
 
-          if (userRole === "RECRUITER" && !isCandidateRoute) {
-            targetUrl = callbackUrl;
-          } else if (userRole === "CANDIDATE" && !isRecruiterRoute) {
-            targetUrl = callbackUrl;
+          // If a valid safe internal callbackUrl was specified and compatible with role
+          if (isSafeInternalCallback(callbackUrl)) {
+            const isCandidateRoute = callbackUrl.startsWith("/candidate");
+            const isRecruiterRoute = callbackUrl.startsWith("/recruiter");
+
+            if (userRole === "RECRUITER" && !isCandidateRoute) {
+              targetUrl = callbackUrl;
+            } else if (userRole === "CANDIDATE" && !isRecruiterRoute) {
+              targetUrl = callbackUrl;
+            }
           }
         }
 
-        // Navigate and refresh Next.js cache
-        router.push(targetUrl);
-        router.refresh();
+        // Hard navigation to flush client memory caches and ensure all cookies are sent to document
+        window.location.href = targetUrl;
       } catch (err) {
         console.error("Login unexpected error:", err);
         setErrorMessage("An unexpected network or authentication error occurred. Please try again.");
