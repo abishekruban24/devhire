@@ -19,8 +19,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
-import { getAuthenticatedUserRole } from "@/features/auth/actions/auth-actions";
-
 function isSafeInternalCallback(url: string | null): url is string {
   if (!url) return false;
   // Must start with single forward slash, no backslashes, no double slashes, no protocol
@@ -61,7 +59,7 @@ function LoginForm() {
 
     startTransition(async () => {
       try {
-        // 1. Authenticate credentials first (prevents unauthenticated user/role enumeration)
+        // 1. Authenticate credentials via NextAuth
         const res = await signIn("credentials", {
           email: cleanEmail,
           password,
@@ -69,6 +67,8 @@ function LoginForm() {
         });
 
         if (res?.error) {
+          // Explicitly clear success message to prevent conflicting states
+          setSuccessMessage(null);
           if (res.error.toLowerCase().includes("too many")) {
             setErrorMessage(
               "Too many failed login attempts. Please wait 5 minutes before trying again."
@@ -81,35 +81,62 @@ function LoginForm() {
           return;
         }
 
-        // 2. Credentials valid - display success feedback
+        // 2. Authentication succeeded - set success message and clear any errors
+        setErrorMessage(null);
         setSuccessMessage("Authentication verified. Redirecting to your dashboard...");
 
-        // 3. Resolve user role authoritatively from the authenticated server session
-        const authRoleRes = await getAuthenticatedUserRole();
+        // 3. Resolve role from the fresh authenticated session
+        let userRole: string | undefined;
+        try {
+          const sessionRes = await fetch("/api/auth/session", { cache: "no-store" });
+          if (sessionRes.ok) {
+            const sessionData = await sessionRes.json().catch(() => null);
+            userRole = sessionData?.user?.role;
+          }
+        } catch {
+          // If session fetch fails, userRole remains undefined and fallbacks take over
+        }
 
-        let targetUrl = "/auth/redirect";
+        // Default role-specific destination (fallback based on registered context or candidate default)
+        let targetUrl =
+          userRole === "RECRUITER"
+            ? "/recruiter/dashboard"
+            : userRole === "CANDIDATE"
+            ? "/candidate/dashboard"
+            : registered === "recruiter"
+            ? "/recruiter/dashboard"
+            : "/candidate/dashboard";
 
-        if (authRoleRes.success && authRoleRes.role) {
-          const userRole = authRoleRes.role;
-          targetUrl = userRole === "RECRUITER" ? "/recruiter/dashboard" : "/candidate/dashboard";
+        // If a valid safe internal callbackUrl was specified and compatible with role
+        if (isSafeInternalCallback(callbackUrl)) {
+          const isCandidateRoute = callbackUrl.startsWith("/candidate");
+          const isRecruiterRoute = callbackUrl.startsWith("/recruiter");
 
-          // If a valid safe internal callbackUrl was specified and compatible with role
-          if (isSafeInternalCallback(callbackUrl)) {
-            const isCandidateRoute = callbackUrl.startsWith("/candidate");
-            const isRecruiterRoute = callbackUrl.startsWith("/recruiter");
-
-            if (userRole === "RECRUITER" && !isCandidateRoute) {
-              targetUrl = callbackUrl;
-            } else if (userRole === "CANDIDATE" && !isRecruiterRoute) {
-              targetUrl = callbackUrl;
-            }
+          if (userRole === "RECRUITER" && !isCandidateRoute) {
+            targetUrl = callbackUrl;
+          } else if (userRole === "CANDIDATE" && !isRecruiterRoute) {
+            targetUrl = callbackUrl;
+          } else if (!userRole && !isCandidateRoute && !isRecruiterRoute) {
+            targetUrl = callbackUrl;
           }
         }
 
         // Hard navigation to flush client memory caches and ensure all cookies are sent to document
         window.location.href = targetUrl;
       } catch (err) {
+        // Ignore Next.js redirect-related exceptions so they are not treated as network failures
+        if (
+          err &&
+          typeof err === "object" &&
+          "digest" in err &&
+          typeof (err as { digest: string }).digest === "string" &&
+          (err as { digest: string }).digest.startsWith("NEXT_REDIRECT")
+        ) {
+          return;
+        }
         console.error("Login unexpected error:", err);
+        // Guarantee success and error are mutually exclusive
+        setSuccessMessage(null);
         setErrorMessage("An unexpected network or authentication error occurred. Please try again.");
       }
     });
@@ -137,7 +164,18 @@ function LoginForm() {
 
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4 pt-2">
-          {registered && !errorMessage && !successMessage && (
+          {/* Strictly mutually exclusive feedback banner */}
+          {errorMessage ? (
+            <div className="p-3 rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 text-xs flex items-start gap-2.5 animate-in fade-in">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-400" />
+              <span>{errorMessage}</span>
+            </div>
+          ) : successMessage ? (
+            <div className="p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-xs flex items-center gap-2.5 animate-in fade-in">
+              <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-400" />
+              <span>{successMessage}</span>
+            </div>
+          ) : registered ? (
             <div className="p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-xs flex items-center gap-2.5 animate-in fade-in">
               <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
               <span>
@@ -146,21 +184,7 @@ function LoginForm() {
                   : "Candidate account registered successfully! Please log in below."}
               </span>
             </div>
-          )}
-
-          {errorMessage && (
-            <div className="p-3 rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 text-xs flex items-start gap-2.5 animate-in fade-in">
-              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-400" />
-              <span>{errorMessage}</span>
-            </div>
-          )}
-
-          {successMessage && (
-            <div className="p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-xs flex items-center gap-2.5 animate-in fade-in">
-              <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-400" />
-              <span>{successMessage}</span>
-            </div>
-          )}
+          ) : null}
 
           {/* Email input */}
           <div className="space-y-1.5">

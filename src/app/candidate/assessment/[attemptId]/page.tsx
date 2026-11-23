@@ -1,5 +1,6 @@
 import React from "react";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import Link from "next/link";
 import { auth } from "@/auth";
 import { getAssessmentAttemptData } from "@/features/assessments/actions/attempt-actions";
@@ -16,6 +17,7 @@ interface AssessmentPageProps {
 }
 
 export default async function CandidateAssessmentPage({ params }: AssessmentPageProps) {
+  await connection();
   const { attemptId } = await params;
 
   // 1. Session and Role Authentication Guard

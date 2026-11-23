@@ -16,6 +16,9 @@ function cleanConnectionString(url?: string): string | undefined {
   ) {
     s = s.slice(1, -1).trim();
   }
+  if (s.includes("sslmode=require")) {
+    s = s.replace("sslmode=require", "sslmode=verify-full");
+  }
   return s || undefined;
 }
 

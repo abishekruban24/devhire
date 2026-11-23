@@ -1,6 +1,7 @@
 import React from "react";
 import { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
@@ -35,6 +36,7 @@ export const metadata: Metadata = {
 export const instant = false;
 
 export default async function RecruiterDashboardPage() {
+  await connection();
   let session = null;
   try {
     session = await auth();
