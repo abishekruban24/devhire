@@ -15,6 +15,15 @@ import {
   Briefcase,
   Sparkles,
   Trophy,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  Video,
+  Camera,
+  Eye,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -51,6 +60,7 @@ export function RecruiterManualReviewManagement({
   const [reviewDetail, setReviewDetail] = useState<AttemptReviewDetail | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [integrityExpanded, setIntegrityExpanded] = useState(true);
 
   // Form State inside Modal
   const [questionScores, setQuestionScores] = useState<Record<string, number>>({});
@@ -516,6 +526,237 @@ export function RecruiterManualReviewManagement({
                       <div className="text-slate-300">{reviewDetail.assessment.durationMinutes} minutes</div>
                     </div>
                   </div>
+
+                  {/* Smart Proctoring & Assessment Integrity Section */}
+                  {reviewDetail.integrity && (
+                    <div className="rounded-2xl border border-slate-800/90 bg-[#080C14] overflow-hidden shadow-sm">
+                      <div
+                        onClick={() => setIntegrityExpanded((prev) => !prev)}
+                        className="px-4 py-3.5 bg-[#0B101D] border-b border-slate-800 flex items-center justify-between cursor-pointer hover:bg-[#0E1526] transition-colors"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className={`h-7 w-7 rounded-lg flex items-center justify-center ${
+                              reviewDetail.integrity.violationCount > 0
+                                ? "bg-amber-500/10 text-amber-400 border border-amber-500/30"
+                                : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                            }`}
+                          >
+                            {reviewDetail.integrity.violationCount > 0 ? (
+                              <ShieldAlert className="h-4 w-4" />
+                            ) : (
+                              <ShieldCheck className="h-4 w-4" />
+                            )}
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold text-white tracking-tight flex items-center gap-2">
+                              Smart Proctoring & Integrity Telemetry
+                              <span
+                                className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                                  reviewDetail.integrity.submissionReason === "POLICY_VIOLATION"
+                                    ? "bg-rose-950/60 text-rose-300 border-rose-800/50"
+                                    : reviewDetail.integrity.submissionReason === "TIMER_EXPIRED"
+                                    ? "bg-amber-950/60 text-amber-300 border-amber-800/50"
+                                    : "bg-emerald-950/60 text-emerald-300 border-emerald-800/50"
+                                }`}
+                              >
+                                {reviewDetail.integrity.submissionReason === "POLICY_VIOLATION"
+                                  ? "Auto-Terminated (Policy Violation)"
+                                  : reviewDetail.integrity.submissionReason === "TIMER_EXPIRED"
+                                  ? "Timer Expired Auto-Submit"
+                                  : "Manual Submission"}
+                              </span>
+                            </span>
+                            <p className="text-[11px] text-slate-400 mt-0.5">
+                              {reviewDetail.integrity.violationCount === 0
+                                ? "Clean session: No proctoring policy warnings recorded"
+                                : `${reviewDetail.integrity.violationCount} total violation warning(s) logged during test session`}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            className="p-1 rounded text-slate-400 hover:text-white"
+                          >
+                            {integrityExpanded ? (
+                              <ChevronUp className="h-4 w-4" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      {integrityExpanded && (
+                        <div className="p-4 space-y-4">
+                          {/* Violation Metric Cards */}
+                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                            <div className="p-3 rounded-xl bg-[#0B101D] border border-slate-800/80 text-center">
+                              <span className="text-[10px] uppercase font-bold text-slate-400">
+                                Tab Switches
+                              </span>
+                              <div
+                                className={`text-base font-bold mt-1 ${
+                                  reviewDetail.integrity.tabSwitchCount > 0
+                                    ? "text-amber-400"
+                                    : "text-white"
+                                }`}
+                              >
+                                {reviewDetail.integrity.tabSwitchCount}
+                              </div>
+                            </div>
+                            <div className="p-3 rounded-xl bg-[#0B101D] border border-slate-800/80 text-center">
+                              <span className="text-[10px] uppercase font-bold text-slate-400">
+                                Focus Loss
+                              </span>
+                              <div
+                                className={`text-base font-bold mt-1 ${
+                                  reviewDetail.integrity.focusLossCount > 0
+                                    ? "text-amber-400"
+                                    : "text-white"
+                                }`}
+                              >
+                                {reviewDetail.integrity.focusLossCount}
+                              </div>
+                            </div>
+                            <div className="p-3 rounded-xl bg-[#0B101D] border border-slate-800/80 text-center">
+                              <span className="text-[10px] uppercase font-bold text-slate-400">
+                                Fullscreen Exits
+                              </span>
+                              <div
+                                className={`text-base font-bold mt-1 ${
+                                  reviewDetail.integrity.fullscreenExitCount > 0
+                                    ? "text-amber-400"
+                                    : "text-white"
+                                }`}
+                              >
+                                {reviewDetail.integrity.fullscreenExitCount}
+                              </div>
+                            </div>
+                            <div className="p-3 rounded-xl bg-[#0B101D] border border-slate-800/80 text-center">
+                              <span className="text-[10px] uppercase font-bold text-slate-400">
+                                Copy / Paste
+                              </span>
+                              <div
+                                className={`text-base font-bold mt-1 ${
+                                  reviewDetail.integrity.copyPasteAttempts > 0
+                                    ? "text-rose-400"
+                                    : "text-white"
+                                }`}
+                              >
+                                {reviewDetail.integrity.copyPasteAttempts}
+                              </div>
+                            </div>
+                            <div className="p-3 rounded-xl bg-[#0B101D] border border-slate-800/80 text-center col-span-2 sm:col-span-1">
+                              <span className="text-[10px] uppercase font-bold text-slate-400">
+                                Face Absence
+                              </span>
+                              <div
+                                className={`text-base font-bold mt-1 ${
+                                  reviewDetail.integrity.faceAbsenceCount > 0
+                                    ? "text-purple-400"
+                                    : "text-white"
+                                }`}
+                              >
+                                {reviewDetail.integrity.faceAbsenceCount}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Candidate Accommodation Notes if provided */}
+                          {reviewDetail.integrity.accommodationNotes && (
+                            <div className="p-3 rounded-xl bg-blue-950/30 border border-blue-800/40 text-xs flex items-start gap-2.5">
+                              <AlertCircle className="h-4 w-4 text-blue-400 shrink-0 mt-0.5" />
+                              <div>
+                                <span className="font-bold text-blue-200">
+                                  Candidate Accommodation Request:
+                                </span>
+                                <p className="text-slate-300 mt-0.5 leading-relaxed">
+                                  {reviewDetail.integrity.accommodationNotes}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Integrity Event Audit Timeline */}
+                          <div className="space-y-2">
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                              Integrity Audit Event Log ({reviewDetail.integrity.events.length})
+                            </span>
+                            {reviewDetail.integrity.events.length === 0 ? (
+                              <div className="p-3 rounded-xl bg-[#0B101D] border border-slate-800/60 text-xs text-slate-400 text-center">
+                                No security or proctoring warnings recorded during this session.
+                              </div>
+                            ) : (
+                              <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                                {reviewDetail.integrity.events.map((evt) => (
+                                  <div
+                                    key={evt.id}
+                                    className="p-2.5 rounded-xl bg-[#0B101D] border border-slate-800/60 flex items-center justify-between gap-3 text-xs"
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className="h-2 w-2 rounded-full bg-amber-400 shrink-0" />
+                                      <span className="font-semibold text-slate-200 truncate">
+                                        {evt.eventType.replace(/_/g, " ")}
+                                      </span>
+                                    </div>
+                                    <span className="text-[11px] text-slate-400 font-mono shrink-0">
+                                      {formatDate(evt.timestamp)}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Incident Video Recordings */}
+                          {reviewDetail.integrity.recordings.length > 0 && (
+                            <div className="space-y-2 pt-2 border-t border-slate-800">
+                              <div className="flex items-center gap-2">
+                                <Video className="h-3.5 w-3.5 text-purple-400" />
+                                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                                  Incident Video Recordings (
+                                  {reviewDetail.integrity.recordings.length})
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {reviewDetail.integrity.recordings.map((rec) => (
+                                  <div
+                                    key={rec.id}
+                                    className="p-3 rounded-xl bg-[#0B101D] border border-slate-800/70 space-y-2"
+                                  >
+                                    <div className="flex items-center justify-between text-[11px]">
+                                      <span className="font-semibold text-purple-300">
+                                        {rec.incidentEventType
+                                          ? `Incident: ${rec.incidentEventType.replace(/_/g, " ")}`
+                                          : `Mode: ${rec.recordingType}`}
+                                      </span>
+                                      <span className="text-slate-500 font-mono">
+                                        {rec.durationSeconds}s • {Math.round(rec.fileSize / 1024)} KB
+                                      </span>
+                                    </div>
+                                    {rec.storageKey ? (
+                                      <video
+                                        src={rec.storageKey}
+                                        controls
+                                        className="w-full rounded-lg bg-black border border-slate-800 max-h-48"
+                                      />
+                                    ) : (
+                                      <div className="h-28 rounded-lg bg-black flex items-center justify-center text-slate-500 text-xs">
+                                        Recording saved to persistent ledger
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Questions Review Section */}
                   <div className="space-y-6">

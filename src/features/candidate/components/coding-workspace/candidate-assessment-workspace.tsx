@@ -6,13 +6,17 @@ import {
   submitAssessmentAttempt,
   type AssessmentAttemptData,
   type CandidateQuestionItem,
+  type SubmissionReason,
 } from "@/features/assessments/actions/attempt-actions";
+import { CandidatePreAssessmentOnboarding } from "@/features/assessments/components/candidate-pre-assessment-onboarding";
+import { AssessmentWebcamPreview } from "@/features/assessments/components/assessment-webcam-preview";
+import { useAssessmentProctoring } from "@/features/assessments/hooks/use-assessment-proctoring";
 import { AssessmentWorkspaceHeader } from "./assessment-workspace-header";
 import { ProblemDetailsPane } from "./problem-details-pane";
 import { MonacoCodeEditor } from "./monaco-code-editor";
 import { SubmissionConfirmationModal } from "./submission-confirmation-modal";
 import { SubmissionCompletedView } from "./submission-completed-view";
-import { Clock, ArrowRight, Loader2 } from "lucide-react";
+import { Clock, ArrowRight, Loader2, ShieldAlert, ShieldX, X, Maximize } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface CandidateAssessmentWorkspaceProps {
@@ -173,46 +177,54 @@ export function CandidateAssessmentWorkspace({
   };
 
   // 5. Final Submission Handler
-  const handleFinalSubmit = useCallback(async () => {
-    if (data.isSubmitted || isSubmitting) return;
+  const handleFinalSubmit = useCallback(
+    async (reason: SubmissionReason = "MANUAL") => {
+      if (data.isSubmitted || isSubmitting) return;
 
-    setIsSubmitting(true);
-    setSubmitError(null);
+      setIsSubmitting(true);
+      setSubmitError(null);
 
-    // Prepare answers snapshot
-    const answers = data.questions.map((q) => ({
-      questionId: q.id,
-      code: codeByQuestion[q.id] || "",
-      language: languageByQuestion[q.id] || "python",
-    }));
+      // Prepare answers snapshot
+      const answers = data.questions.map((q) => ({
+        questionId: q.id,
+        code: codeByQuestion[q.id] || "",
+        language: languageByQuestion[q.id] || "python",
+      }));
 
-    try {
-      const res = await submitAssessmentAttempt({
-        attemptId: data.attemptId,
-        answers,
-      });
+      try {
+        const res = await submitAssessmentAttempt({
+          attemptId: data.attemptId,
+          answers,
+          submissionReason: reason,
+        });
 
-      if (res.success) {
-        setIsConfirmModalOpen(false);
-        setData((prev) => ({
-          ...prev,
-          status: "SUBMITTED",
-          isSubmitted: true,
-          submittedAt: res.submittedAt || new Date().toISOString(),
-        }));
-      } else {
-        setSubmitError(res.message || "Failed to submit assessment.");
+        if (res.success) {
+          setIsConfirmModalOpen(false);
+          setData((prev) => ({
+            ...prev,
+            status: "SUBMITTED",
+            isSubmitted: true,
+            submittedAt: res.submittedAt || new Date().toISOString(),
+            integrity: {
+              ...prev.integrity,
+              submissionReason: reason,
+            },
+          }));
+        } else {
+          setSubmitError(res.message || "Failed to submit assessment.");
+        }
+      } catch {
+        setSubmitError("An unexpected error occurred during submission.");
+      } finally {
+        setIsSubmitting(false);
       }
-    } catch {
-      setSubmitError("An unexpected error occurred during submission.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [data.isSubmitted, isSubmitting, data.questions, codeByQuestion, languageByQuestion, data.attemptId]);
+    },
+    [data.isSubmitted, isSubmitting, data.questions, codeByQuestion, languageByQuestion, data.attemptId]
+  );
 
-  // 6. Server-Authoritative Timer Interval
+  // 6. Server-Authoritative Timer Interval (Starts ONLY after candidate gives onboarding consent)
   useEffect(() => {
-    if (data.isSubmitted || isTimedOut) return;
+    if (data.isSubmitted || isTimedOut || !data.integrity.consentGivenAt) return;
 
     const timer = setInterval(() => {
       setTimeRemainingSeconds((prev) => {
@@ -220,7 +232,7 @@ export function CandidateAssessmentWorkspace({
           clearInterval(timer);
           setIsTimedOut(true);
           // Automatically finalize submission when countdown reaches zero
-          handleFinalSubmit();
+          handleFinalSubmit("TIMER_EXPIRED");
           return 0;
         }
         return prev - 1;
@@ -228,7 +240,35 @@ export function CandidateAssessmentWorkspace({
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [data.isSubmitted, isTimedOut, handleFinalSubmit]);
+  }, [data.isSubmitted, isTimedOut, data.integrity.consentGivenAt, handleFinalSubmit]);
+
+  // 7. Real-time Browser Proctoring Hook
+  const {
+    violationCount,
+    recentNotice,
+    isFullscreen,
+    requestFullscreen,
+    recordViolation,
+    clearRecentNotice,
+  } = useAssessmentProctoring({
+    attemptId: data.attemptId,
+    enableProctoring:
+      data.proctoring.enableProctoring &&
+      !!data.integrity.consentGivenAt &&
+      !data.isSubmitted &&
+      !isTimedOut,
+    requireFullscreen: data.proctoring.requireFullscreen,
+    trackTabSwitches: data.proctoring.trackTabSwitches,
+    trackFocusLoss: data.proctoring.trackFocusLoss,
+    restrictPaste: data.proctoring.restrictPaste,
+    restrictCopy: data.proctoring.restrictCopy,
+    maxViolations: data.proctoring.maxViolations ?? 3,
+    autoSubmitOnViolations: data.proctoring.autoSubmitOnViolations,
+    initialViolations: data.integrity.violationCount || 0,
+    onAutoSubmit: (reason) => {
+      handleFinalSubmit(reason);
+    },
+  });
 
   // Clean up autosave timer on unmount
   useEffect(() => {
@@ -242,6 +282,30 @@ export function CandidateAssessmentWorkspace({
   // If already submitted, display submission confirmation view
   if (data.isSubmitted) {
     return <SubmissionCompletedView data={data} />;
+  }
+
+  // Pre-assessment onboarding gate (timer starts only AFTER acknowledgement)
+  if (!data.integrity.consentGivenAt && !data.isExpired) {
+    return (
+      <CandidatePreAssessmentOnboarding
+        data={data}
+        onComplete={(updated) => {
+          if (!updated) return;
+          setData((prev) => ({
+            ...prev,
+            ...updated,
+            timeRemainingSeconds: updated.timeRemainingSeconds ?? prev.timeRemainingSeconds,
+            integrity: {
+              ...prev.integrity,
+              ...(updated.integrity || {}),
+            },
+          }));
+          if (typeof updated.timeRemainingSeconds === "number") {
+            setTimeRemainingSeconds(updated.timeRemainingSeconds);
+          }
+        }}
+      />
+    );
   }
 
   return (
@@ -259,7 +323,29 @@ export function CandidateAssessmentWorkspace({
         onSubmitClick={() => setIsConfirmModalOpen(true)}
         isSubmitting={isSubmitting}
         readOnly={isTimedOut}
+        proctoringEnabled={data.proctoring.enableProctoring}
+        violationCount={violationCount}
+        maxViolations={data.proctoring.maxViolations}
+        webcamActive={data.proctoring.webcamProctoring}
       />
+
+      {/* Fullscreen Policy Warning Strip */}
+      {data.proctoring.requireFullscreen && !isFullscreen && !data.isSubmitted && !isTimedOut && (
+        <div className="bg-amber-950/80 border-b border-amber-600/50 px-4 py-2 flex items-center justify-between text-xs text-amber-200 shrink-0">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="h-4 w-4 text-amber-400 shrink-0" />
+            <span>Fullscreen mode is required by assessment proctoring rules.</span>
+          </div>
+          <Button
+            size="sm"
+            onClick={requestFullscreen}
+            className="h-7 px-3 bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-semibold gap-1.5"
+          >
+            <Maximize className="h-3 w-3" />
+            <span>Enter Fullscreen</span>
+          </Button>
+        </div>
+      )}
 
       {/* Main Split Coding Area */}
       <div className="flex-1 min-h-0 p-3 sm:p-4 grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 overflow-hidden">
@@ -318,7 +404,7 @@ export function CandidateAssessmentWorkspace({
       <SubmissionConfirmationModal
         isOpen={isConfirmModalOpen}
         onClose={() => setIsConfirmModalOpen(false)}
-        onConfirm={handleFinalSubmit}
+        onConfirm={() => handleFinalSubmit("MANUAL")}
         isSubmitting={isSubmitting}
         questions={data.questions}
         codeByQuestion={codeByQuestion}
@@ -349,7 +435,7 @@ export function CandidateAssessmentWorkspace({
             )}
 
             <Button
-              onClick={handleFinalSubmit}
+              onClick={() => handleFinalSubmit("TIMER_EXPIRED")}
               disabled={isSubmitting}
               className="w-full bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs h-10 shadow-lg shadow-rose-950/40"
             >
@@ -361,6 +447,92 @@ export function CandidateAssessmentWorkspace({
               ) : (
                 <>
                   <span>Finalize & View Submission</span>
+                  <ArrowRight className="h-4 w-4 ml-1.5" />
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Real-time Proctoring Violation Toast */}
+      {recentNotice && (
+        <div className="fixed top-20 right-4 z-50 max-w-sm rounded-2xl border border-amber-500/50 bg-[#0B101D]/95 backdrop-blur-md p-4 text-xs text-white shadow-2xl animate-in slide-in-from-top-4 duration-300">
+          <div className="flex items-start gap-3">
+            <div className="h-8 w-8 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0">
+              <ShieldAlert className="h-4 w-4" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-bold text-amber-300 truncate">
+                  {recentNotice.title}
+                </span>
+                <button
+                  onClick={clearRecentNotice}
+                  className="text-slate-400 hover:text-white p-0.5"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
+                {recentNotice.message}
+              </p>
+              <div className="mt-2 text-[10px] text-amber-400/90 font-mono flex items-center justify-between">
+                <span>
+                  Notice #{violationCount}
+                  {data.proctoring.maxViolations
+                    ? ` of ${data.proctoring.maxViolations} max`
+                    : ""}
+                </span>
+                <span>{recentNotice.timestamp}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Webcam Proctoring & Face Presence Widget */}
+      {data.proctoring.webcamProctoring && (
+        <AssessmentWebcamPreview
+          attemptId={data.attemptId}
+          enabled={!data.isSubmitted && !isTimedOut && !!data.integrity.consentGivenAt}
+          recordingMode={data.proctoring.recordingMode}
+          onViolation={(eventType, title, message) => {
+            recordViolation(eventType, title, message);
+          }}
+        />
+      )}
+
+      {/* Policy Violation Auto-Finalize Modal */}
+      {data.integrity.submissionReason === "POLICY_VIOLATION" && !data.isSubmitted && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="w-full max-w-md rounded-2xl border border-rose-500/50 bg-[#0B101D] p-6 text-center space-y-5 shadow-2xl">
+            <div className="h-16 w-16 mx-auto rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center">
+              <ShieldX className="h-8 w-8 animate-pulse" />
+            </div>
+
+            <div className="space-y-1.5">
+              <h2 className="text-xl font-bold text-white tracking-tight">
+                Assessment Terminated
+              </h2>
+              <p className="text-xs text-slate-400">
+                The maximum allowable proctoring policy warnings ({data.proctoring.maxViolations}) have been reached. Your session has been finalized and submitted for recruiter audit.
+              </p>
+            </div>
+
+            <Button
+              onClick={() => handleFinalSubmit("POLICY_VIOLATION")}
+              disabled={isSubmitting}
+              className="w-full bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs h-10 shadow-lg shadow-rose-950/40"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Recording Final Submissions...
+                </>
+              ) : (
+                <>
+                  <span>View Submission Confirmation</span>
                   <ArrowRight className="h-4 w-4 ml-1.5" />
                 </>
               )}
