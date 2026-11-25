@@ -19,6 +19,8 @@ export interface CreateInvitationInput {
   assessmentId: string;
   expiresInDays?: number;
   expiresAt?: Date | string | null;
+  isRetest?: boolean;
+  retestReason?: string;
 }
 
 export interface RecruiterInvitationItem {
@@ -39,6 +41,20 @@ export interface RecruiterInvitationItem {
   completedAt?: string | null;
   revokedAt?: string | null;
   createdAt: string;
+  attempt?: {
+    id: string;
+    status: string;
+    score: number | null;
+    startedAt?: string | null;
+    submittedAt?: string | null;
+    review?: {
+      id: string;
+      status: string;
+      totalScore: number;
+      passed: boolean;
+      feedback?: string | null;
+    } | null;
+  } | null;
 }
 
 export interface CandidateInvitationItem {
@@ -321,7 +337,7 @@ export async function createAssessmentInvitation(
 
     // 5. Transactional Creation with Concurrency-Safe Duplicate Guard
     const createdInvitation = await prisma.$transaction(async (tx) => {
-      // Atomic active check inside transaction
+      // Atomic active check inside transaction: prevent duplicate pending/started invites
       const existingActive = await tx.assessmentInvitation.findFirst({
         where: {
           applicationId: cleanAppId,
@@ -334,6 +350,32 @@ export async function createAssessmentInvitation(
         const error = new Error(`An active assessment invitation for "${assessment.title}" is already pending or in progress for this candidate.`);
         (error as unknown as { isDuplicate: boolean }).isDuplicate = true;
         throw error;
+      }
+
+      // Accidental reassessment prevention: check if candidate already has a completed/submitted attempt
+      if (!input.isRetest) {
+        const existingAttempt = await tx.assessmentAttempt.findFirst({
+          where: {
+            applicationId: cleanAppId,
+            assessmentId: cleanAssId,
+            status: { in: ["SUBMITTED", "EVALUATED"] },
+          },
+          include: { review: true },
+          orderBy: { createdAt: "desc" },
+        });
+
+        if (existingAttempt) {
+          const scoreDisplay = existingAttempt.review?.totalScore !== undefined
+            ? `${existingAttempt.review.totalScore}%`
+            : existingAttempt.score !== null
+            ? `${existingAttempt.score}%`
+            : "Submitted";
+          const error = new Error(
+            `Candidate has already completed "${assessment.title}" (Score: ${scoreDisplay}). To issue an intentional retest, use the authorized Retest action.`
+          );
+          (error as unknown as { isAlreadyCompleted: boolean }).isAlreadyCompleted = true;
+          throw error;
+        }
       }
 
       const inv = await tx.assessmentInvitation.create({
@@ -363,13 +405,22 @@ export async function createAssessmentInvitation(
     safeRevalidatePath("/candidate/dashboard");
 
     const candidateName = application.candidate.name || application.candidate.email;
+    const actionLabel = input.isRetest ? "Retest invitation" : "Technical assessment invitation";
     return {
       success: true,
-      message: `Technical assessment invitation for "${assessment.title}" successfully sent to ${candidateName}.`,
+      message: `${actionLabel} for "${assessment.title}" successfully sent to ${candidateName}.`,
       invitationId: createdInvitation.id,
     };
   } catch (err: unknown) {
-    const errObj = err as { code?: string; message?: string; isDuplicate?: boolean };
+    const errObj = err as { code?: string; message?: string; isDuplicate?: boolean; isAlreadyCompleted?: boolean };
+    if (errObj?.isAlreadyCompleted) {
+      return {
+        success: false,
+        message: errObj.message || `Candidate has already completed "${assessmentTitle}". To issue an intentional retest, use the authorized Retest action.`,
+        errorType: "DUPLICATE_INVITATION",
+      };
+    }
+
     if (
       errObj?.isDuplicate ||
       errObj?.code === "P2002" ||
@@ -393,6 +444,90 @@ export async function createAssessmentInvitation(
       errorType: "SERVER_ERROR",
     };
   }
+}
+
+/**
+ * RETEST a candidate on an assessment (Explicitly Authorized Retest Action).
+ * Preserves all historical attempts, submissions, scores, and reviews.
+ */
+export async function retestAssessmentCandidate(
+  input: {
+    applicationId: string;
+    assessmentId: string;
+    reason?: string;
+    expiresInDays?: number;
+  },
+  sessionOverride?: SessionContext | null
+): Promise<{
+  success: boolean;
+  message: string;
+  invitationId?: string;
+  errorType?: "UNAUTHENTICATED" | "ROLE_DENIED" | "FORBIDDEN" | "VALIDATION_ERROR" | "DUPLICATE_INVITATION" | "SERVER_ERROR";
+}> {
+  return createAssessmentInvitation(
+    {
+      applicationId: input.applicationId,
+      assessmentId: input.assessmentId,
+      expiresInDays: input.expiresInDays || 7,
+      isRetest: true,
+      retestReason: input.reason,
+    },
+    sessionOverride
+  );
+}
+
+/**
+ * REINVITE a candidate whose previous invitation expired or was revoked.
+ */
+export async function reinviteCandidate(
+  input: {
+    invitationId: string;
+    expiresInDays?: number;
+  },
+  sessionOverride?: SessionContext | null
+): Promise<{
+  success: boolean;
+  message: string;
+  invitationId?: string;
+  errorType?: "UNAUTHENTICATED" | "ROLE_DENIED" | "FORBIDDEN" | "VALIDATION_ERROR" | "DUPLICATE_INVITATION" | "SERVER_ERROR";
+}> {
+  const authCheck = await authenticateRecruiter(sessionOverride);
+  if (!authCheck.authenticated || !authCheck.companyId) {
+    return {
+      success: false,
+      message: authCheck.error || "Authentication required.",
+      errorType: "UNAUTHENTICATED",
+    };
+  }
+
+  const existingInv = await prisma.assessmentInvitation.findUnique({
+    where: { id: input.invitationId },
+    select: {
+      id: true,
+      applicationId: true,
+      assessmentId: true,
+      companyId: true,
+      status: true,
+    },
+  });
+
+  if (!existingInv || existingInv.companyId !== authCheck.companyId) {
+    return {
+      success: false,
+      message: "Invitation not found or unauthorized.",
+      errorType: "FORBIDDEN",
+    };
+  }
+
+  return createAssessmentInvitation(
+    {
+      applicationId: existingInv.applicationId,
+      assessmentId: existingInv.assessmentId,
+      expiresInDays: input.expiresInDays || 7,
+      isRetest: existingInv.status === "COMPLETED",
+    },
+    sessionOverride
+  );
 }
 
 /**
@@ -551,6 +686,26 @@ export async function getCompanyInvitations(
             },
           },
         },
+        attempts: {
+          select: {
+            id: true,
+            status: true,
+            score: true,
+            startedAt: true,
+            submittedAt: true,
+            review: {
+              select: {
+                id: true,
+                status: true,
+                totalScore: true,
+                passed: true,
+                feedback: true,
+              },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -573,6 +728,25 @@ export async function getCompanyInvitations(
       completedAt: inv.completedAt ? inv.completedAt.toISOString() : null,
       revokedAt: inv.revokedAt ? inv.revokedAt.toISOString() : null,
       createdAt: inv.createdAt.toISOString(),
+      attempt:
+        inv.attempts && inv.attempts.length > 0
+          ? {
+              id: inv.attempts[0].id,
+              status: inv.attempts[0].status,
+              score: inv.attempts[0].score,
+              startedAt: inv.attempts[0].startedAt ? inv.attempts[0].startedAt.toISOString() : null,
+              submittedAt: inv.attempts[0].submittedAt ? inv.attempts[0].submittedAt.toISOString() : null,
+              review: inv.attempts[0].review
+                ? {
+                    id: inv.attempts[0].review.id,
+                    status: inv.attempts[0].review.status,
+                    totalScore: inv.attempts[0].review.totalScore,
+                    passed: inv.attempts[0].review.passed,
+                    feedback: inv.attempts[0].review.feedback,
+                  }
+                : null,
+            }
+          : null,
     }));
 
     return {

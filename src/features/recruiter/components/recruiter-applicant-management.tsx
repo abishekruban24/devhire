@@ -20,6 +20,12 @@ import {
   Ban,
   ShieldCheck,
   Code2,
+  Eye,
+  Award,
+  FileText,
+  RefreshCw,
+  PlayCircle,
+  History,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +37,8 @@ import type { RecruiterInvitationItem } from "@/features/assessments/actions/inv
 import {
   createAssessmentInvitation,
   revokeAssessmentInvitation,
+  retestAssessmentCandidate,
+  reinviteCandidate,
 } from "@/features/assessments/actions/invitation-actions";
 import type { ApplicationStatus } from "@prisma/client";
 import { formatDate } from "@/lib/utils";
@@ -77,6 +85,17 @@ export function RecruiterApplicantManagement({
   const [selectedAssessmentId, setSelectedAssessmentId] = useState<string>("");
   const [expiresInDays, setExpiresInDays] = useState<number>(7);
   const [inviteError, setInviteError] = useState<string | null>(null);
+  const [isRetestChecked, setIsRetestChecked] = useState(false);
+  const [retestReason, setRetestReason] = useState("");
+
+  // Contextual Modals State (Phase 9A Lifecycle)
+  const [historyModalApp, setHistoryModalApp] = useState<RecruiterApplicantItem | null>(null);
+  const [viewInviteModalInv, setViewInviteModalInv] = useState<RecruiterInvitationItem | null>(null);
+  const [viewProgressModalInv, setViewProgressModalInv] = useState<RecruiterInvitationItem | null>(null);
+  const [viewResultsModalInv, setViewResultsModalInv] = useState<RecruiterInvitationItem | null>(null);
+  const [retestModalInv, setRetestModalInv] = useState<RecruiterInvitationItem | null>(null);
+  const [retestModalReason, setRetestModalReason] = useState("");
+  const [retestModalDays, setRetestModalDays] = useState(7);
 
   // Global Feedback Banner
   const [feedback, setFeedback] = useState<{
@@ -101,6 +120,8 @@ export function RecruiterApplicantManagement({
     setInviteApplicant(app);
     setInviteError(null);
     setFeedback(null);
+    setIsRetestChecked(false);
+    setRetestReason("");
 
     // Filter active assessments compatible with this applicant's job
     const active = companyAssessments.filter((a) => a.status === "ACTIVE");
@@ -123,6 +144,8 @@ export function RecruiterApplicantManagement({
   const handleCloseInviteModal = () => {
     setInviteApplicant(null);
     setInviteError(null);
+    setIsRetestChecked(false);
+    setRetestReason("");
   };
 
   // Quick Status Transition (e.g. from table Shortlist/Reject button)
@@ -189,6 +212,8 @@ export function RecruiterApplicantManagement({
         applicationId: inviteApplicant.id,
         assessmentId: selectedAssessmentId,
         expiresInDays,
+        isRetest: isRetestChecked,
+        retestReason: isRetestChecked ? retestReason.trim() || undefined : undefined,
       });
 
       if (res.success) {
@@ -242,6 +267,88 @@ export function RecruiterApplicantManagement({
             inv.id === invitationId
               ? { ...inv, status: "REVOKED", revokedAt: new Date().toISOString() }
               : inv
+          )
+        );
+        setFeedback({
+          type: "success",
+          message: res.message,
+        });
+      } else {
+        setFeedback({
+          type: "error",
+          message: res.message,
+        });
+      }
+    });
+  };
+
+  // Authorize Intentional Retest for Candidate
+  const handleRetestSubmit = () => {
+    if (!retestModalInv) return;
+    startTransition(async () => {
+      const res = await retestAssessmentCandidate({
+        applicationId: retestModalInv.applicationId,
+        assessmentId: retestModalInv.assessmentId,
+        reason: retestModalReason.trim() || "Recruiter authorized candidate retake",
+        expiresInDays: retestModalDays,
+      });
+      if (res.success && res.invitationId) {
+        const newInv: RecruiterInvitationItem = {
+          id: res.invitationId,
+          assessmentId: retestModalInv.assessmentId,
+          assessmentTitle: retestModalInv.assessmentTitle,
+          candidateId: retestModalInv.candidateId,
+          candidateName: retestModalInv.candidateName,
+          candidateEmail: retestModalInv.candidateEmail,
+          candidateHeadline: retestModalInv.candidateHeadline,
+          candidateAvatarUrl: retestModalInv.candidateAvatarUrl,
+          applicationId: retestModalInv.applicationId,
+          jobId: retestModalInv.jobId,
+          jobTitle: retestModalInv.jobTitle,
+          status: "PENDING",
+          expiresAt: new Date(Date.now() + retestModalDays * 24 * 60 * 60 * 1000).toISOString(),
+          createdAt: new Date().toISOString(),
+          attempt: null,
+        };
+        setInvitations((prev) => [newInv, ...prev]);
+        setApplications((prev) =>
+          prev.map((app) =>
+            app.id === retestModalInv.applicationId ? { ...app, status: "ASSESSMENT_INVITED" } : app
+          )
+        );
+        setFeedback({
+          type: "success",
+          message: res.message,
+        });
+        setRetestModalInv(null);
+        setRetestModalReason("");
+      } else {
+        setFeedback({
+          type: "error",
+          message: res.message,
+        });
+      }
+    });
+  };
+
+  // Reinvite Candidate with Expired Invitation
+  const handleReinviteSubmit = (invitationId: string) => {
+    startTransition(async () => {
+      const existing = invitations.find((i) => i.id === invitationId);
+      const res = await reinviteCandidate({ invitationId, expiresInDays: 7 });
+      if (res.success && res.invitationId && existing) {
+        const newInv: RecruiterInvitationItem = {
+          ...existing,
+          id: res.invitationId,
+          status: "PENDING",
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          createdAt: new Date().toISOString(),
+          attempt: null,
+        };
+        setInvitations((prev) => [newInv, ...prev]);
+        setApplications((prev) =>
+          prev.map((app) =>
+            app.id === existing.applicationId ? { ...app, status: "ASSESSMENT_INVITED" } : app
           )
         );
         setFeedback({
@@ -359,15 +466,15 @@ export function RecruiterApplicantManagement({
     switch (status) {
       case "PENDING":
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-blue-950/60 text-blue-300 border border-blue-800/40">
-            <Clock className="h-3 w-3 text-blue-400" />
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-purple-950/60 text-purple-300 border border-purple-800/40">
+            <Clock className="h-3 w-3 text-purple-400" />
             Pending
           </span>
         );
       case "STARTED":
         return (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-amber-950/60 text-amber-300 border border-amber-800/40 animate-pulse">
-            <Clock className="h-3 w-3 text-amber-400" />
+            <PlayCircle className="h-3 w-3 text-amber-400" />
             In Progress
           </span>
         );
@@ -397,6 +504,77 @@ export function RecruiterApplicantManagement({
     }
   };
 
+  const getDetailedInvitationBadge = (inv: RecruiterInvitationItem) => {
+    if (inv.status === "COMPLETED") {
+      if (inv.attempt?.review) {
+        return (
+          <span
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium border ${
+              inv.attempt.review.passed
+                ? "bg-emerald-950/60 text-emerald-300 border-emerald-800/40"
+                : "bg-rose-950/60 text-rose-300 border-rose-800/40"
+            }`}
+          >
+            {inv.attempt.review.passed ? (
+              <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+            ) : (
+              <AlertCircle className="h-3 w-3 text-rose-400" />
+            )}
+            Evaluated • {inv.attempt.review.totalScore}%
+          </span>
+        );
+      }
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-blue-950/60 text-blue-300 border border-blue-800/40">
+          <FileText className="h-3 w-3 text-blue-400" />
+          Code Submitted
+        </span>
+      );
+    }
+    if (inv.status === "STARTED") {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-amber-950/60 text-amber-300 border border-amber-800/40">
+          <PlayCircle className="h-3 w-3 text-amber-400 animate-pulse" />
+          In Progress
+        </span>
+      );
+    }
+    if (inv.status === "PENDING") {
+      const isExpired = inv.expiresAt && new Date(inv.expiresAt) < new Date();
+      if (isExpired) {
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-900 text-slate-400 border border-slate-800">
+            <Clock className="h-3 w-3 text-slate-500" />
+            Expired
+          </span>
+        );
+      }
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-purple-950/60 text-purple-300 border border-purple-800/40">
+          <Clock className="h-3 w-3 text-purple-400" />
+          Pending
+        </span>
+      );
+    }
+    if (inv.status === "EXPIRED") {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-900 text-slate-400 border border-slate-800">
+          <Clock className="h-3 w-3 text-slate-500" />
+          Expired
+        </span>
+      );
+    }
+    if (inv.status === "REVOKED") {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-rose-950/60 text-rose-300 border border-rose-800/40">
+          <Ban className="h-3 w-3 text-rose-400" />
+          Revoked
+        </span>
+      );
+    }
+    return <Badge variant="secondary">{inv.status}</Badge>;
+  };
+
   const getInitials = (name: string) => {
     return name
       .split(" ")
@@ -406,11 +584,17 @@ export function RecruiterApplicantManagement({
       .substring(0, 2);
   };
 
-  // Find active invitation for an application
-  const getActiveInvitationForApp = (appId: string) => {
-    return invitations.find(
-      (inv) => inv.applicationId === appId && (inv.status === "PENDING" || inv.status === "STARTED")
-    );
+  // Find all invitations for an application, sorted newest first
+  const getInvitationsForApp = (appId: string) => {
+    return invitations
+      .filter((inv) => inv.applicationId === appId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  };
+
+  // Find latest invitation for an application (or active one)
+  const getLatestInvitationForApp = (appId: string) => {
+    const appInvs = getInvitationsForApp(appId);
+    return appInvs.length > 0 ? appInvs[0] : null;
   };
 
   // Active company assessments count
@@ -618,7 +802,9 @@ export function RecruiterApplicantManagement({
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {filteredApplications.map((app) => {
-                    const activeInv = getActiveInvitationForApp(app.id);
+                    const appInvs = getInvitationsForApp(app.id);
+                    const latestInv = appInvs[0] || null;
+                    const hasPriorAttempts = appInvs.length > 1;
 
                     return (
                       <tr key={app.id} className="hover:bg-slate-800/20 transition-colors">
@@ -651,20 +837,49 @@ export function RecruiterApplicantManagement({
                           {getStatusBadge(app.status)}
                         </td>
 
-                        {/* Assessment Invitation Column */}
+                        {/* Assessment Invitation Column (Phase 9A Lifecycle Display) */}
                         <td className="px-5 py-4 text-xs">
-                          {activeInv ? (
+                          {latestInv ? (
                             <div className="space-y-1">
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-medium text-purple-300 truncate max-w-[180px]">
-                                  {activeInv.assessmentTitle}
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-medium text-purple-300 truncate max-w-[170px]" title={latestInv.assessmentTitle}>
+                                  {latestInv.assessmentTitle}
                                 </span>
-                                {getInvitationBadge(activeInv.status)}
+                                {getDetailedInvitationBadge(latestInv)}
                               </div>
-                              {activeInv.expiresAt && (
-                                <div className="text-[10px] text-slate-500">
-                                  Expires: {formatDate(activeInv.expiresAt)}
-                                </div>
+                              <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                                {latestInv.status === "COMPLETED" && latestInv.attempt?.review && (
+                                  <span>
+                                    Score: <strong className="text-slate-200">{latestInv.attempt.review.totalScore}%</strong>
+                                    {latestInv.attempt.review.passed ? (
+                                      <span className="text-emerald-400 font-semibold ml-1">Passed</span>
+                                    ) : (
+                                      <span className="text-rose-400 font-semibold ml-1">Failed</span>
+                                    )}
+                                  </span>
+                                )}
+                                {latestInv.status === "COMPLETED" && !latestInv.attempt?.review && (
+                                  <span className="text-blue-400">Submitted • Awaiting Review</span>
+                                )}
+                                {latestInv.status === "STARTED" && (
+                                  <span className="text-amber-400">Session in progress</span>
+                                )}
+                                {latestInv.status === "PENDING" && latestInv.expiresAt && (
+                                  <span className={new Date(latestInv.expiresAt) < new Date() ? "text-rose-400 font-medium" : "text-slate-400"}>
+                                    {new Date(latestInv.expiresAt) < new Date() ? "Expired: " : "Expires: "}
+                                    {formatDate(latestInv.expiresAt)}
+                                  </span>
+                                )}
+                              </div>
+                              {hasPriorAttempts && (
+                                <button
+                                  type="button"
+                                  onClick={() => setHistoryModalApp(app)}
+                                  className="inline-flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 font-medium hover:underline pt-0.5"
+                                >
+                                  <History className="h-3 w-3" />
+                                  <span>+{appInvs.length - 1} earlier attempt{appInvs.length > 2 ? "s" : ""}</span>
+                                </button>
                               )}
                             </div>
                           ) : (
@@ -676,10 +891,11 @@ export function RecruiterApplicantManagement({
                           {formatDate(app.createdAt)}
                         </td>
 
+                        {/* Context-Aware Actions Column */}
                         <td className="px-5 py-4 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {/* Invite to Assessment Button */}
-                            {!activeInv && (
+                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                            {/* 1. Not invited -> Invite */}
+                            {!latestInv && (
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -692,7 +908,134 @@ export function RecruiterApplicantManagement({
                               </Button>
                             )}
 
-                            {/* Shortlist Quick Action */}
+                            {/* 2. Pending invitation -> View Invite & Revoke */}
+                            {latestInv && latestInv.status === "PENDING" && (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setViewInviteModalInv(latestInv)}
+                                  className="h-8 px-2 text-xs text-purple-300 border-purple-800/60 bg-purple-950/30 hover:bg-purple-900/40"
+                                  title="View Invitation Details"
+                                >
+                                  <Eye className="h-3 w-3 mr-1 text-purple-400" />
+                                  View Invite
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={isPending}
+                                  onClick={() => handleRevokeInvitationSubmit(latestInv.id)}
+                                  className="h-8 px-2 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-950/40"
+                                  title="Revoke invitation"
+                                >
+                                  <Ban className="h-3 w-3 mr-1" />
+                                  Revoke
+                                </Button>
+                              </>
+                            )}
+
+                            {/* 3. In Progress -> View Progress */}
+                            {latestInv && latestInv.status === "STARTED" && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setViewProgressModalInv(latestInv)}
+                                className="h-8 px-2 text-xs text-amber-300 border-amber-800/60 bg-amber-950/30 hover:bg-amber-900/40 font-medium"
+                                title="View live workspace progress"
+                              >
+                                <PlayCircle className="h-3 w-3 mr-1 text-amber-400" />
+                                In Progress
+                              </Button>
+                            )}
+
+                            {/* 4. Completed / Submitted / Evaluated */}
+                            {latestInv && latestInv.status === "COMPLETED" && (
+                              <>
+                                {latestInv.attempt?.review ? (
+                                  <>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => setViewResultsModalInv(latestInv)}
+                                      className="h-8 px-2 text-xs text-emerald-300 border-emerald-800/60 bg-emerald-950/30 hover:bg-emerald-900/40 font-medium"
+                                      title="View Evaluation Results"
+                                    >
+                                      <Award className="h-3 w-3 mr-1 text-emerald-400" />
+                                      View Results
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        setRetestModalInv(latestInv);
+                                        setRetestModalReason("");
+                                      }}
+                                      className="h-8 px-2 text-xs text-blue-400 hover:text-blue-300 hover:bg-blue-950/40 font-medium"
+                                      title="Authorize Intentional Retest"
+                                    >
+                                      <RefreshCw className="h-3 w-3 mr-1" />
+                                      Retest
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <a
+                                      href={`/recruiter/dashboard?view=reviews#review-${latestInv.attempt?.id || ""}`}
+                                      className="inline-flex items-center h-8 px-2.5 rounded-md text-xs font-medium text-blue-300 border border-blue-800/60 bg-blue-950/40 hover:bg-blue-900/50 hover:text-blue-200"
+                                      title="Review Submitted Code & Tests"
+                                    >
+                                      <FileText className="h-3 w-3 mr-1 text-blue-400" />
+                                      Review Code
+                                    </a>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        setRetestModalInv(latestInv);
+                                        setRetestModalReason("");
+                                      }}
+                                      className="h-8 px-2 text-xs text-blue-400 hover:text-blue-300 hover:bg-blue-950/40"
+                                      title="Authorize Intentional Retest"
+                                    >
+                                      <RefreshCw className="h-3 w-3 mr-1" />
+                                      Retest
+                                    </Button>
+                                  </>
+                                )}
+                              </>
+                            )}
+
+                            {/* 5. Expired -> Reinvite */}
+                            {latestInv && (latestInv.status === "EXPIRED" || (latestInv.status === "PENDING" && latestInv.expiresAt && new Date(latestInv.expiresAt) < new Date())) && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={isPending}
+                                onClick={() => handleReinviteSubmit(latestInv.id)}
+                                className="h-8 px-2 text-xs text-amber-300 border-amber-800/60 bg-amber-950/30 hover:bg-amber-900/40 font-medium"
+                                title="Reinvite candidate with fresh 7-day expiration deadline"
+                              >
+                                <RefreshCw className="h-3 w-3 mr-1 text-amber-400" />
+                                Reinvite
+                              </Button>
+                            )}
+
+                            {/* 6. Revoked -> Invite */}
+                            {latestInv && latestInv.status === "REVOKED" && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleOpenInviteModal(app)}
+                                className="h-8 px-2 text-xs text-purple-300 border-purple-800/60 bg-purple-950/30 hover:bg-purple-900/40"
+                                title="Send New Assessment Invitation"
+                              >
+                                <Send className="h-3 w-3 mr-1" />
+                                Invite
+                              </Button>
+                            )}
+
+                            {/* Candidate Status Quick Actions */}
                             {app.status !== "SHORTLISTED" && (
                               <Button
                                 variant="ghost"
@@ -707,7 +1050,6 @@ export function RecruiterApplicantManagement({
                               </Button>
                             )}
 
-                            {/* Reject Quick Action */}
                             {app.status !== "REJECTED" && (
                               <Button
                                 variant="ghost"
@@ -722,14 +1064,14 @@ export function RecruiterApplicantManagement({
                               </Button>
                             )}
 
-                            {/* Full Review Action */}
+                            {/* Application Details */}
                             <Button
                               variant="secondary"
                               size="sm"
                               onClick={() => handleOpenModal(app)}
-                              className="h-8 px-3 text-xs border-slate-700 bg-slate-800/80 hover:bg-slate-800 text-slate-200"
+                              className="h-8 px-2.5 text-xs border-slate-700 bg-slate-800/80 hover:bg-slate-800 text-slate-200"
                             >
-                              Review
+                              Details
                             </Button>
                           </div>
                         </td>
@@ -839,21 +1181,120 @@ export function RecruiterApplicantManagement({
                       </td>
 
                       <td className="px-5 py-4 text-right">
-                        {inv.status === "PENDING" ? (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={isPending}
-                            onClick={() => handleRevokeInvitationSubmit(inv.id)}
-                            className="h-7 px-2 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-950/40"
-                            title="Revoke unstarted invitation"
-                          >
-                            <Ban className="h-3 w-3 mr-1" />
-                            Revoke
-                          </Button>
-                        ) : (
-                          <span className="text-[11px] text-slate-500 italic">Locked</span>
-                        )}
+                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                          {inv.status === "PENDING" && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setViewInviteModalInv(inv)}
+                                className="h-7 px-2 text-xs text-purple-300 border-purple-800/60 bg-purple-950/30 hover:bg-purple-900/40"
+                                title="View invitation details"
+                              >
+                                <Eye className="h-3 w-3 mr-1 text-purple-400" />
+                                View
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={isPending}
+                                onClick={() => handleRevokeInvitationSubmit(inv.id)}
+                                className="h-7 px-2 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-950/40"
+                                title="Revoke unstarted invitation"
+                              >
+                                <Ban className="h-3 w-3 mr-1" />
+                                Revoke
+                              </Button>
+                            </>
+                          )}
+
+                          {inv.status === "STARTED" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setViewProgressModalInv(inv)}
+                              className="h-7 px-2 text-xs text-amber-300 border-amber-800/60 bg-amber-950/30 hover:bg-amber-900/40"
+                              title="Active workspace session"
+                            >
+                              <PlayCircle className="h-3 w-3 mr-1 text-amber-400" />
+                              Active
+                            </Button>
+                          )}
+
+                          {inv.status === "COMPLETED" && (
+                            <>
+                              {inv.attempt?.review ? (
+                                <>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setViewResultsModalInv(inv)}
+                                    className="h-7 px-2 text-xs text-emerald-300 border-emerald-800/60 bg-emerald-950/30 hover:bg-emerald-900/40"
+                                    title="View graded score breakdown"
+                                  >
+                                    <Award className="h-3 w-3 mr-1 text-emerald-400" />
+                                    Results
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setRetestModalInv(inv);
+                                      setRetestModalReason("");
+                                    }}
+                                    className="h-7 px-2 text-xs text-blue-400 hover:text-blue-300 hover:bg-blue-950/40"
+                                    title="Authorize candidate retest"
+                                  >
+                                    <RefreshCw className="h-3 w-3 mr-1" />
+                                    Retest
+                                  </Button>
+                                </>
+                              ) : (
+                                <>
+                                  <a
+                                    href={`/recruiter/dashboard?view=reviews#review-${inv.attempt?.id || ""}`}
+                                    className="inline-flex items-center h-7 px-2 rounded-md text-xs font-medium text-blue-300 border border-blue-800/60 bg-blue-950/40 hover:bg-blue-900/50 hover:text-blue-200"
+                                    title="Review candidate code submissions"
+                                  >
+                                    <FileText className="h-3 w-3 mr-1 text-blue-400" />
+                                    Review
+                                  </a>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      setRetestModalInv(inv);
+                                      setRetestModalReason("");
+                                    }}
+                                    className="h-7 px-2 text-xs text-blue-400 hover:text-blue-300 hover:bg-blue-950/40"
+                                    title="Authorize candidate retest"
+                                  >
+                                    <RefreshCw className="h-3 w-3 mr-1" />
+                                    Retest
+                                  </Button>
+                                </>
+                              )}
+                            </>
+                          )}
+
+                          {(inv.status === "EXPIRED" || (inv.status === "PENDING" && inv.expiresAt && new Date(inv.expiresAt) < new Date())) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={isPending}
+                              onClick={() => handleReinviteSubmit(inv.id)}
+                              className="h-7 px-2 text-xs text-amber-300 border-amber-800/60 bg-amber-950/30 hover:bg-amber-900/40"
+                              title="Reinvite candidate with fresh 7-day expiration deadline"
+                            >
+                              <RefreshCw className="h-3 w-3 mr-1 text-amber-400" />
+                              Reinvite
+                            </Button>
+                          )}
+
+                          {inv.status === "REVOKED" && (
+                            <span className="text-[11px] text-slate-500 italic">Revoked</span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -979,6 +1420,59 @@ export function RecruiterApplicantManagement({
                 </p>
               </div>
 
+              {/* Retest Authorization Guard (Phase 9A) */}
+              {(() => {
+                const applicantInvs = inviteApplicant ? getInvitationsForApp(inviteApplicant.id) : [];
+                const hasCompletedAssessment = applicantInvs.some(
+                  (i) => i.status === "COMPLETED" || i.attempt?.status === "SUBMITTED"
+                );
+
+                if (!hasCompletedAssessment) return null;
+
+                return (
+                  <div className="rounded-xl border border-amber-500/40 bg-amber-950/20 p-4 space-y-3">
+                    <div className="flex items-start gap-2.5">
+                      <AlertCircle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="text-xs font-semibold text-amber-200 block">
+                          Existing Assessment Attempt Detected
+                        </strong>
+                        <p className="text-[11px] text-amber-300/80 leading-relaxed mt-0.5">
+                          This candidate has already submitted an assessment for this role. To prevent accidental reassessment, issuing another assessment requires explicit authorization.
+                        </p>
+                      </div>
+                    </div>
+
+                    <label className="flex items-center gap-2 cursor-pointer pt-1">
+                      <input
+                        type="checkbox"
+                        checked={isRetestChecked}
+                        onChange={(e) => setIsRetestChecked(e.target.checked)}
+                        className="rounded border-slate-700 bg-slate-900 text-purple-600 focus:ring-purple-500 h-4 w-4"
+                      />
+                      <span className="text-xs font-semibold text-white">
+                        Authorize Intentional Candidate Retest
+                      </span>
+                    </label>
+
+                    {isRetestChecked && (
+                      <div className="space-y-1.5 pl-6 pt-1">
+                        <label className="text-[11px] font-medium text-slate-300 block">
+                          Retest Justification Reason <span className="text-rose-400">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Approved retake due to technical connectivity loss"
+                          value={retestReason}
+                          onChange={(e) => setRetestReason(e.target.value)}
+                          className="w-full h-9 px-3 rounded-lg border border-slate-700 bg-[#080C14] text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-purple-500"
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Informational Guard Note */}
               <div className="rounded-xl border border-slate-800 bg-[#080C14]/80 p-3.5 text-[11px] text-slate-400 flex items-start gap-2.5">
                 <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
@@ -1000,7 +1494,16 @@ export function RecruiterApplicantManagement({
               </Button>
               <Button
                 size="sm"
-                disabled={isPending || !selectedAssessmentId || activeAssessmentsCount === 0}
+                disabled={
+                  isPending ||
+                  !selectedAssessmentId ||
+                  activeAssessmentsCount === 0 ||
+                  (inviteApplicant &&
+                    getInvitationsForApp(inviteApplicant.id).some(
+                      (i) => i.status === "COMPLETED" || i.attempt?.status === "SUBMITTED"
+                    ) &&
+                    (!isRetestChecked || !retestReason.trim()))
+                }
                 onClick={handleSendInvitationSubmit}
                 className="bg-purple-600 hover:bg-purple-500 text-white font-medium text-xs flex items-center gap-1.5"
               >
@@ -1012,7 +1515,7 @@ export function RecruiterApplicantManagement({
                 ) : (
                   <>
                     <Send className="h-3.5 w-3.5" />
-                    Send Assessment Invitation
+                    {isRetestChecked ? "Authorize & Send Retest" : "Send Assessment Invitation"}
                   </>
                 )}
               </Button>
@@ -1241,6 +1744,458 @@ export function RecruiterApplicantManagement({
                   )}
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 1. HISTORICAL ATTEMPTS MODAL (Phase 9A)                                   */}
+      {/* ========================================================================= */}
+      {historyModalApp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div
+            className="relative w-full max-w-2xl rounded-2xl border border-slate-800 bg-[#0B101D] text-slate-100 shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5 border-b border-slate-800/80 bg-[#0E1526]/90 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center">
+                  <History className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">
+                    Assessment History — {historyModalApp.candidate.name}
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    {historyModalApp.job.title} • All historical attempts and evaluations
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setHistoryModalApp(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-5 max-h-[60vh] overflow-y-auto">
+              {(() => {
+                const appInvs = getInvitationsForApp(historyModalApp.id);
+                if (appInvs.length === 0) {
+                  return (
+                    <p className="text-xs text-slate-500 italic text-center py-6">
+                      No invitations recorded for this candidate.
+                    </p>
+                  );
+                }
+
+                return (
+                  <div className="space-y-3">
+                    {appInvs.map((inv, idx) => (
+                      <div
+                        key={inv.id}
+                        className="rounded-xl border border-slate-800/80 bg-[#0A0F1D] p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-semibold text-white">
+                              {inv.assessmentTitle}
+                            </span>
+                            {idx === 0 && (
+                              <Badge variant="outline" className="text-[10px] bg-blue-950/40 text-blue-300 border-blue-800/40">
+                                Latest
+                              </Badge>
+                            )}
+                            {getDetailedInvitationBadge(inv)}
+                          </div>
+                          <div className="flex items-center gap-3 text-[11px] text-slate-400">
+                            <span>Sent: {formatDate(inv.createdAt)}</span>
+                            {inv.expiresAt && (
+                              <span>Expires: {formatDate(inv.expiresAt)}</span>
+                            )}
+                            {inv.attempt?.submittedAt && (
+                              <span>Submitted: {formatDate(inv.attempt.submittedAt)}</span>
+                            )}
+                          </div>
+                          {inv.attempt?.review && (
+                            <div className="text-xs text-slate-300 pt-0.5">
+                              Evaluation Score:{" "}
+                              <strong className={inv.attempt.review.passed ? "text-emerald-400" : "text-rose-400"}>
+                                {inv.attempt.review.totalScore}%
+                              </strong>{" "}
+                              ({inv.attempt.review.passed ? "Passed" : "Not Passed"})
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {inv.status === "COMPLETED" && (
+                            <a
+                              href={`/recruiter/dashboard?view=reviews#review-${inv.attempt?.id || ""}`}
+                              className="inline-flex items-center h-7 px-2.5 rounded-lg text-xs font-medium text-blue-300 border border-blue-800/60 bg-blue-950/40 hover:bg-blue-900/50"
+                            >
+                              <FileText className="h-3 w-3 mr-1 text-blue-400" />
+                              View Code
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="p-4 border-t border-slate-800/80 bg-[#0E1526]/90 flex justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setHistoryModalApp(null)}
+                className="text-xs border-slate-700 bg-slate-800/60 text-slate-300"
+              >
+                Close History
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 2. VIEW INVITATION DETAILS MODAL (Phase 9A)                               */}
+      {/* ========================================================================= */}
+      {viewInviteModalInv && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div
+            className="relative w-full max-w-md rounded-2xl border border-slate-800 bg-[#0B101D] text-slate-100 shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5 border-b border-slate-800/80 bg-[#0E1526]/90 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center justify-center">
+                  <Eye className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Assessment Invitation</h3>
+                  <p className="text-[11px] text-slate-400">Issued to {viewInviteModalInv.candidateName}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setViewInviteModalInv(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3.5 text-xs">
+              <div className="flex justify-between py-1.5 border-b border-slate-800/60">
+                <span className="text-slate-400">Candidate:</span>
+                <strong className="text-white">{viewInviteModalInv.candidateName} ({viewInviteModalInv.candidateEmail})</strong>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-slate-800/60">
+                <span className="text-slate-400">Challenge:</span>
+                <span className="text-purple-300 font-medium">{viewInviteModalInv.assessmentTitle}</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-slate-800/60">
+                <span className="text-slate-400">Target Role:</span>
+                <span className="text-slate-200">{viewInviteModalInv.jobTitle}</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-slate-800/60">
+                <span className="text-slate-400">Status:</span>
+                <span>{getDetailedInvitationBadge(viewInviteModalInv)}</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-slate-800/60">
+                <span className="text-slate-400">Date Issued:</span>
+                <span className="text-slate-300">{formatDate(viewInviteModalInv.createdAt)}</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-slate-800/60">
+                <span className="text-slate-400">Expiration:</span>
+                <span className={viewInviteModalInv.expiresAt && new Date(viewInviteModalInv.expiresAt) < new Date() ? "text-rose-400 font-medium" : "text-slate-300"}>
+                  {viewInviteModalInv.expiresAt ? formatDate(viewInviteModalInv.expiresAt) : "None"}
+                </span>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-slate-800/80 bg-[#0E1526]/90 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setViewInviteModalInv(null)}
+                className="text-xs border-slate-700 bg-slate-800/60 text-slate-300"
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 3. VIEW PROGRESS MODAL (Phase 9A)                                         */}
+      {/* ========================================================================= */}
+      {viewProgressModalInv && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div
+            className="relative w-full max-w-md rounded-2xl border border-slate-800 bg-[#0B101D] text-slate-100 shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5 border-b border-slate-800/80 bg-[#0E1526]/90 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center">
+                  <PlayCircle className="h-4 w-4 animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Active Assessment Session</h3>
+                  <p className="text-[11px] text-slate-400">{viewProgressModalInv.candidateName}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setViewProgressModalInv(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3.5 flex items-start gap-2.5">
+                <Clock className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold text-amber-200 block mb-0.5">Session In Progress</span>
+                  <p className="text-[11px] text-amber-300/80">
+                    Candidate has initiated their assessment workspace session. Upon final submission or timer expiration, their code and proctoring telemetry will automatically finalize.
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-800/80 bg-[#0A0F1D] p-3 space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Assessment:</span>
+                  <span className="text-white font-medium">{viewProgressModalInv.assessmentTitle}</span>
+                </div>
+                {viewProgressModalInv.attempt?.startedAt && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Started At:</span>
+                    <span className="text-slate-300">{formatDate(viewProgressModalInv.attempt.startedAt)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-slate-800/80 bg-[#0E1526]/90 flex justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setViewProgressModalInv(null)}
+                className="text-xs border-slate-700 bg-slate-800/60 text-slate-300"
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 4. VIEW RESULTS MODAL (Phase 9A)                                          */}
+      {/* ========================================================================= */}
+      {viewResultsModalInv && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div
+            className="relative w-full max-w-lg rounded-2xl border border-slate-800 bg-[#0B101D] text-slate-100 shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5 border-b border-slate-800/80 bg-[#0E1526]/90 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center">
+                  <Award className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Evaluation Score Breakdown</h3>
+                  <p className="text-[11px] text-slate-400">{viewResultsModalInv.candidateName} • {viewResultsModalInv.assessmentTitle}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setViewResultsModalInv(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              {viewResultsModalInv.attempt?.review ? (
+                <>
+                  <div className="rounded-xl border border-slate-800/80 bg-[#0A0F1D] p-4 flex items-center justify-between">
+                    <div>
+                      <span className="text-[11px] text-slate-400 block mb-0.5">Overall Benchmark Score</span>
+                      <div className="text-2xl font-bold text-white">
+                        {viewResultsModalInv.attempt.review.totalScore}%
+                      </div>
+                    </div>
+                    <div>
+                      {viewResultsModalInv.attempt.review.passed ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-emerald-950/60 text-emerald-300 border border-emerald-800/50">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                          Passed Evaluation
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-rose-950/60 text-rose-300 border border-rose-800/50">
+                          <XCircle className="h-4 w-4 text-rose-400" />
+                          Did Not Pass
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {viewResultsModalInv.attempt.review.feedback && (
+                    <div className="space-y-1.5">
+                      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                        Recruiter Feedback & Notes
+                      </span>
+                      <div className="rounded-xl border border-slate-800/80 bg-[#0E1526]/50 p-3.5 text-slate-200 leading-relaxed whitespace-pre-line">
+                        {viewResultsModalInv.attempt.review.feedback}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-slate-400 italic">No formal evaluation recorded yet.</p>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-slate-800/80 bg-[#0E1526]/90 flex items-center justify-between">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setViewResultsModalInv(null)}
+                className="text-xs border-slate-700 bg-slate-800/60 text-slate-300"
+              >
+                Close
+              </Button>
+              {viewResultsModalInv.attempt?.id && (
+                <a
+                  href={`/recruiter/dashboard?view=reviews#review-${viewResultsModalInv.attempt.id}`}
+                  className="inline-flex items-center h-8 px-3 rounded-lg text-xs font-medium text-white bg-blue-600 hover:bg-blue-500 shadow-sm"
+                >
+                  <FileText className="h-3.5 w-3.5 mr-1.5" />
+                  Full Code Review
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 5. AUTHORIZE RETEST MODAL (Phase 9A)                                      */}
+      {/* ========================================================================= */}
+      {retestModalInv && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div
+            className="relative w-full max-w-lg rounded-2xl border border-slate-800 bg-[#0B101D] text-slate-100 shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5 border-b border-slate-800/80 bg-[#0E1526]/90 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center">
+                  <RefreshCw className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Authorize Candidate Retest</h3>
+                  <p className="text-[11px] text-slate-400">{retestModalInv.candidateName} • {retestModalInv.assessmentTitle}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setRetestModalInv(null);
+                  setRetestModalReason("");
+                }}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              <div className="rounded-xl border border-blue-500/30 bg-blue-950/20 p-3.5 flex items-start gap-2.5">
+                <AlertCircle className="h-4 w-4 text-blue-400 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold text-blue-200 block mb-0.5">Preserving Submission History</span>
+                  <p className="text-[11px] text-blue-300/80">
+                    Authorizing a retest creates a fresh, separate attempt for this candidate. All previous code submissions, scores, and review notes remain securely preserved in audit history.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300 block">
+                  Retest Authorization Reason <span className="text-rose-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Candidate experienced verified hardware/connectivity issue during test"
+                  value={retestModalReason}
+                  onChange={(e) => setRetestModalReason(e.target.value)}
+                  className="w-full h-10 px-3 rounded-xl border border-slate-700 bg-[#080C14] text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300 block">
+                  New Expiration Window
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[3, 7, 14, 30].map((days) => (
+                    <button
+                      key={days}
+                      type="button"
+                      onClick={() => setRetestModalDays(days)}
+                      className={`py-2 px-3 rounded-lg border text-xs font-medium transition-all ${
+                        retestModalDays === days
+                          ? "border-blue-500 bg-blue-950/50 text-blue-200"
+                          : "border-slate-800 bg-[#080C14] text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      {days} Days
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-slate-800/80 bg-[#0E1526]/90 flex items-center justify-end gap-2.5">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setRetestModalInv(null);
+                  setRetestModalReason("");
+                }}
+                className="text-xs border-slate-700 bg-slate-800/60 text-slate-300"
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                disabled={isPending || !retestModalReason.trim()}
+                onClick={handleRetestSubmit}
+                className="text-xs bg-blue-600 hover:bg-blue-500 text-white font-medium flex items-center gap-1.5"
+              >
+                {isPending ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Authorizing...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Authorize & Issue Retest
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         </div>

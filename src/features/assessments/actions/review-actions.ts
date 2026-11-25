@@ -122,6 +122,39 @@ export interface QuestionReviewDetail {
   feedback: string | null;
 }
 
+export interface IntegrityEventItem {
+  id: string;
+  eventType: string;
+  timestamp: string;
+  metadata: unknown;
+}
+
+export interface RecordingItem {
+  id: string;
+  recordingType: string;
+  storageKey: string;
+  fileSize: number;
+  durationSeconds: number;
+  incidentEventType: string | null;
+  status: string;
+  createdAt: string;
+}
+
+export interface AttemptIntegrityDetail {
+  submissionReason: "MANUAL" | "TIMER_EXPIRED" | "POLICY_VIOLATION";
+  violationCount: number;
+  tabSwitchCount: number;
+  focusLossCount: number;
+  fullscreenExitCount: number;
+  copyPasteAttempts: number;
+  faceAbsenceCount: number;
+  accommodationNotes: string | null;
+  cameraConsentGiven: boolean;
+  recordingConsentGiven: boolean;
+  events: IntegrityEventItem[];
+  recordings: RecordingItem[];
+}
+
 export interface AttemptReviewDetail {
   attemptId: string;
   status: AttemptStatus;
@@ -157,6 +190,7 @@ export interface AttemptReviewDetail {
     reviewerName: string | null;
   } | null;
   questions: QuestionReviewDetail[];
+  integrity?: AttemptIntegrityDetail;
 }
 
 export interface CandidateAssessmentHistoryItem {
@@ -411,6 +445,12 @@ export async function getAttemptReviewDetails(
           },
         },
         submissions: true,
+        integrityEvents: {
+          orderBy: { timestamp: "asc" },
+        },
+        recordings: {
+          orderBy: { createdAt: "asc" },
+        },
         review: {
           include: {
             reviewer: { select: { id: true, name: true } },
@@ -543,6 +583,38 @@ export async function getAttemptReviewDetails(
             }
           : null,
         questions: questionDetails,
+        integrity: isCompanyRecruiter
+          ? {
+              submissionReason: attempt.submissionReason,
+              violationCount: attempt.violationCount,
+              tabSwitchCount: attempt.integrityEvents.filter((e) => e.eventType === "TAB_SWITCH").length,
+              focusLossCount: attempt.integrityEvents.filter((e) => e.eventType === "FOCUS_LOSS").length,
+              fullscreenExitCount: attempt.integrityEvents.filter((e) => e.eventType === "FULLSCREEN_EXIT").length,
+              copyPasteAttempts: attempt.integrityEvents.filter(
+                (e) => e.eventType === "PASTE_ATTEMPT" || e.eventType === "COPY_ATTEMPT"
+              ).length,
+              faceAbsenceCount: attempt.integrityEvents.filter((e) => e.eventType === "FACE_ABSENT").length,
+              accommodationNotes: attempt.accommodationNotes,
+              cameraConsentGiven: attempt.cameraConsentGiven,
+              recordingConsentGiven: attempt.recordingConsentGiven,
+              events: attempt.integrityEvents.map((e) => ({
+                id: e.id,
+                eventType: e.eventType,
+                timestamp: e.timestamp.toISOString(),
+                metadata: e.metadata,
+              })),
+              recordings: attempt.recordings.map((r) => ({
+                id: r.id,
+                recordingType: r.recordingType,
+                storageKey: r.storageKey,
+                fileSize: r.fileSize,
+                durationSeconds: r.durationSeconds,
+                incidentEventType: r.incidentEventType,
+                status: r.status,
+                createdAt: r.createdAt.toISOString(),
+              })),
+            }
+          : undefined,
       },
     };
   } catch (err) {

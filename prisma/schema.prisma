@@ -101,6 +101,24 @@ enum SubmissionStatus {
   RUNTIME_ERROR
 }
 
+enum SubmissionReason {
+  MANUAL
+  TIMER_EXPIRED
+  POLICY_VIOLATION
+}
+
+enum IntegrityEventType {
+  TAB_SWITCH
+  FOCUS_LOSS
+  FULLSCREEN_EXIT
+  PASTE_ATTEMPT
+  COPY_ATTEMPT
+  FACE_ABSENT
+  MULTIPLE_FACES
+  CAMERA_DISCONNECTED
+  CAMERA_BLOCKED
+}
+
 // -------------------------------------------------------------
 // MODELS
 // -------------------------------------------------------------
@@ -130,6 +148,7 @@ model User {
   recruiterInvitationsSent AssessmentInvitation[] @relation("RecruiterInvitationsSent")
   submissions              Submission[]
   reviews                  AssessmentReview[]     @relation("RecruiterReviews")
+  recordingAuditLogs       RecordingAuditLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -228,6 +247,18 @@ model Assessment {
   passingScore    Float            @default(70.0)
   status          AssessmentStatus @default(DRAFT)
 
+  // Phase 9 Proctoring Configuration
+  enableProctoring       Boolean          @default(false)
+  requireFullscreen      Boolean          @default(false)
+  trackTabSwitches       Boolean          @default(true)
+  trackFocusLoss         Boolean          @default(true)
+  restrictPaste          Boolean          @default(false)
+  restrictCopy           Boolean          @default(false)
+  maxViolations          Int              @default(3)
+  autoSubmitOnViolations Boolean          @default(false)
+  webcamProctoring       Boolean          @default(false)
+  recordingMode          String           @default("NONE") // NONE, INCIDENT, FULL
+
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
@@ -308,9 +339,21 @@ model AssessmentAttempt {
   submittedAt   DateTime?
   expiresAt     DateTime?
 
-  submissions   Submission[]
-  evaluationJob EvaluationJob?
-  review        AssessmentReview?
+  // Phase 9 Proctoring Snapshots & Integrity Records
+  submissionReason      SubmissionReason @default(MANUAL)
+  proctoringSnapshot    Json?
+  consentGivenAt        DateTime?
+  cameraConsentGiven    Boolean          @default(false)
+  recordingConsentGiven Boolean          @default(false)
+  accommodationGranted  Boolean          @default(false)
+  accommodationNotes    String?          @db.Text
+  violationCount        Int              @default(0)
+
+  submissions     Submission[]
+  evaluationJob   EvaluationJob?
+  review          AssessmentReview?
+  integrityEvents IntegrityEvent[]
+  recordings      AssessmentRecording[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -458,4 +501,65 @@ model QuestionReview {
   @@unique([reviewId, questionId])
   @@index([reviewId])
   @@index([questionId])
+}
+
+// -------------------------------------------------------------
+// PHASE 9: ASSESSMENT INTEGRITY, PROCTORING & AUDIT MODELS
+// -------------------------------------------------------------
+
+model IntegrityEvent {
+  id        String             @id @default(uuid())
+  attemptId String
+  attempt   AssessmentAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  eventType IntegrityEventType
+  severity  String             @default("WARNING") // INFO, WARNING, CRITICAL
+  timestamp DateTime           @default(now())
+  durationMs Int?              // Duration of unfocus/absence in milliseconds
+  metadata  Json?              // Non-sensitive context (e.g. face count, window state)
+
+  createdAt DateTime           @default(now())
+
+  @@index([attemptId])
+  @@index([eventType])
+  @@index([timestamp])
+}
+
+model AssessmentRecording {
+  id                 String            @id @default(uuid())
+  attemptId          String
+  attempt            AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  recordingType      String            @default("INCIDENT") // INCIDENT, FULL
+  storageProvider    String            @default("LOCAL_DEV") // R2, SUPABASE, LOCAL_DEV, NONE
+  storageKey         String            // Storage bucket object key or local path
+  fileSize           Int               @default(0)
+  mimeType           String            @default("video/webm")
+  durationSeconds    Int               @default(0)
+  incidentEventType  String?           // Event type that triggered incident clip
+  status             String            @default("READY") // RECORDING, UPLOADING, READY, FAILED, DELETED
+  expiresAt          DateTime          // Retention deadline (default 7 days)
+  deletedAt          DateTime?
+
+  createdAt          DateTime          @default(now())
+
+  auditLogs          RecordingAuditLog[]
+
+  @@index([attemptId])
+  @@index([expiresAt])
+  @@index([status])
+}
+
+model RecordingAuditLog {
+  id          String              @id @default(uuid())
+  recordingId String
+  recording   AssessmentRecording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action      String              // PLAYBACK, DOWNLOAD, DELETE
+  ipAddress   String?
+  userAgent   String?
+  timestamp   DateTime            @default(now())
+
+  @@index([recordingId])
+  @@index([userId])
+  @@index([timestamp])
 }

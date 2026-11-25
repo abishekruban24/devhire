@@ -50,6 +50,16 @@ export interface CreateAssessmentInput {
   status?: AssessmentStatus;
   jobId?: string | null;
   questions?: CreateQuestionInput[];
+  enableProctoring?: boolean;
+  requireFullscreen?: boolean;
+  trackTabSwitches?: boolean;
+  trackFocusLoss?: boolean;
+  restrictPaste?: boolean;
+  restrictCopy?: boolean;
+  maxViolations?: number;
+  autoSubmitOnViolations?: boolean;
+  webcamProctoring?: boolean;
+  recordingMode?: string;
 }
 
 export interface UpdateAssessmentInput {
@@ -59,6 +69,16 @@ export interface UpdateAssessmentInput {
   passingScore?: number;
   status?: AssessmentStatus;
   jobId?: string | null;
+  enableProctoring?: boolean;
+  requireFullscreen?: boolean;
+  trackTabSwitches?: boolean;
+  trackFocusLoss?: boolean;
+  restrictPaste?: boolean;
+  restrictCopy?: boolean;
+  maxViolations?: number;
+  autoSubmitOnViolations?: boolean;
+  webcamProctoring?: boolean;
+  recordingMode?: string;
 }
 
 export interface RecruiterTestCaseItem {
@@ -108,6 +128,16 @@ export interface RecruiterAssessmentItem {
     status: JobStatus;
   }[];
   questions: RecruiterQuestionItem[];
+  enableProctoring: boolean;
+  requireFullscreen: boolean;
+  trackTabSwitches: boolean;
+  trackFocusLoss: boolean;
+  restrictPaste: boolean;
+  restrictCopy: boolean;
+  maxViolations: number;
+  autoSubmitOnViolations: boolean;
+  webcamProctoring: boolean;
+  recordingMode: string;
   _count: {
     questions: number;
     attempts: number;
@@ -149,6 +179,16 @@ export interface CandidateAssessmentPreview {
   totalPoints: number;
   expiresAt?: string | null;
   questions: CandidateVisibleQuestionItem[];
+  enableProctoring: boolean;
+  requireFullscreen: boolean;
+  trackTabSwitches: boolean;
+  trackFocusLoss: boolean;
+  restrictPaste: boolean;
+  restrictCopy: boolean;
+  maxViolations: number;
+  autoSubmitOnViolations: boolean;
+  webcamProctoring: boolean;
+  recordingMode: string;
 }
 
 const VALID_ASSESSMENT_STATUSES: AssessmentStatus[] = ["DRAFT", "ACTIVE", "ARCHIVED"];
@@ -420,6 +460,16 @@ export async function createAssessment(
           status,
           companyId: authCheck.companyId,
           creatorId: authCheck.user.id,
+          enableProctoring: input.enableProctoring ?? false,
+          requireFullscreen: input.requireFullscreen ?? false,
+          trackTabSwitches: input.trackTabSwitches ?? true,
+          trackFocusLoss: input.trackFocusLoss ?? true,
+          restrictPaste: input.restrictPaste ?? true,
+          restrictCopy: input.restrictCopy ?? true,
+          maxViolations: input.maxViolations ?? 3,
+          autoSubmitOnViolations: input.autoSubmitOnViolations ?? true,
+          webcamProctoring: input.webcamProctoring ?? false,
+          recordingMode: input.recordingMode ?? "NONE",
         },
       });
 
@@ -519,6 +569,16 @@ export async function getCompanyAssessments(
         status: true,
         companyId: true,
         creatorId: true,
+        enableProctoring: true,
+        requireFullscreen: true,
+        trackTabSwitches: true,
+        trackFocusLoss: true,
+        restrictPaste: true,
+        restrictCopy: true,
+        maxViolations: true,
+        autoSubmitOnViolations: true,
+        webcamProctoring: true,
+        recordingMode: true,
         creator: {
           select: {
             id: true,
@@ -628,6 +688,16 @@ export async function getAssessmentById(
         status: true,
         companyId: true,
         creatorId: true,
+        enableProctoring: true,
+        requireFullscreen: true,
+        trackTabSwitches: true,
+        trackFocusLoss: true,
+        restrictPaste: true,
+        restrictCopy: true,
+        maxViolations: true,
+        autoSubmitOnViolations: true,
+        webcamProctoring: true,
+        recordingMode: true,
         creator: {
           select: {
             id: true,
@@ -815,6 +885,17 @@ export async function updateAssessment(
         });
       }
     }
+
+    if (input.enableProctoring !== undefined) data.enableProctoring = input.enableProctoring;
+    if (input.requireFullscreen !== undefined) data.requireFullscreen = input.requireFullscreen;
+    if (input.trackTabSwitches !== undefined) data.trackTabSwitches = input.trackTabSwitches;
+    if (input.trackFocusLoss !== undefined) data.trackFocusLoss = input.trackFocusLoss;
+    if (input.restrictPaste !== undefined) data.restrictPaste = input.restrictPaste;
+    if (input.restrictCopy !== undefined) data.restrictCopy = input.restrictCopy;
+    if (input.maxViolations !== undefined) data.maxViolations = input.maxViolations;
+    if (input.autoSubmitOnViolations !== undefined) data.autoSubmitOnViolations = input.autoSubmitOnViolations;
+    if (input.webcamProctoring !== undefined) data.webcamProctoring = input.webcamProctoring;
+    if (input.recordingMode !== undefined) data.recordingMode = input.recordingMode;
 
     await prisma.assessment.update({
       where: { id: cleanId },
@@ -1315,6 +1396,16 @@ export async function getCandidateAssessmentPreview(
         durationMinutes: true,
         passingScore: true,
         status: true,
+        enableProctoring: true,
+        requireFullscreen: true,
+        trackTabSwitches: true,
+        trackFocusLoss: true,
+        restrictPaste: true,
+        restrictCopy: true,
+        maxViolations: true,
+        autoSubmitOnViolations: true,
+        webcamProctoring: true,
+        recordingMode: true,
         company: {
           select: {
             name: true,
@@ -1357,6 +1448,16 @@ export async function getCandidateAssessmentPreview(
       totalPoints: assessment.questions.reduce((sum, q) => sum + q.points, 0),
       expiresAt: invitation.expiresAt ? invitation.expiresAt.toISOString() : null,
       questions: [],
+      enableProctoring: assessment.enableProctoring,
+      requireFullscreen: assessment.requireFullscreen,
+      trackTabSwitches: assessment.trackTabSwitches,
+      trackFocusLoss: assessment.trackFocusLoss,
+      restrictPaste: assessment.restrictPaste,
+      restrictCopy: assessment.restrictCopy,
+      maxViolations: assessment.maxViolations,
+      autoSubmitOnViolations: assessment.autoSubmitOnViolations,
+      webcamProctoring: assessment.webcamProctoring,
+      recordingMode: assessment.recordingMode,
     };
 
     return {
