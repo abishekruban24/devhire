@@ -1,0 +1,62 @@
+[
+  {
+    "url": "https://devhire-ten.vercel.app/",
+    "device": "Desktop",
+    "viewport": "1440x900",
+    "dnsMs": 10,
+    "tcpMs": 120,
+    "ttfbMs": 72,
+    "domContentLoadedMs": 562,
+    "loadMs": 562
+  },
+  {
+    "url": "https://devhire-ten.vercel.app/login",
+    "device": "Desktop",
+    "viewport": "1440x900",
+    "dnsMs": 0,
+    "tcpMs": 0,
+    "ttfbMs": 56,
+    "domContentLoadedMs": 608,
+    "loadMs": 608
+  },
+  {
+    "url": "https://devhire-ten.vercel.app/candidate/dashboard",
+    "device": "Desktop",
+    "viewport": "1440x900",
+    "dnsMs": 0,
+    "tcpMs": 0,
+    "ttfbMs": 114,
+    "domContentLoadedMs": 1536,
+    "loadMs": 1988
+  },
+  {
+    "url": "https://devhire-ten.vercel.app/recruiter/dashboard",
+    "device": "Desktop",
+    "viewport": "1440x900",
+    "dnsMs": 0,
+    "tcpMs": 0,
+    "ttfbMs": 50,
+    "domContentLoadedMs": 689,
+    "loadMs": 1393
+  },
+  {
+    "url": "https://devhire-ten.vercel.app/candidate/dashboard",
+    "device": "Mobile (iPhone 14)",
+    "viewport": "390x844",
+    "dnsMs": 0,
+    "tcpMs": 0,
+    "ttfbMs": 61,
+    "domContentLoadedMs": 759,
+    "loadMs": 913
+  },
+  {
+    "url": "https://devhire-ten.vercel.app/recruiter/dashboard",
+    "device": "Mobile (iPhone 14)",
+    "viewport": "390x844",
+    "dnsMs": 0,
+    "tcpMs": 0,
+    "ttfbMs": 70,
+    "domContentLoadedMs": 806,
+    "loadMs": 912
+  }
+]
