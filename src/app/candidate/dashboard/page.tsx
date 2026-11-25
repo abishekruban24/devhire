@@ -4,12 +4,7 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { ProfileOverviewCard } from "@/features/candidate/components/profile-overview-card";
-import { CandidateJobDiscovery } from "@/features/candidate/components/candidate-job-discovery";
-import { UpcomingAssessmentsPreview } from "@/features/candidate/components/upcoming-assessments-preview";
-import { CandidateApplicationsTracker } from "@/features/candidate/components/candidate-applications-tracker";
-import { CandidateAssessmentHistoryTracker } from "@/features/candidate/components/candidate-assessment-history-tracker";
+import { CandidateConsole } from "@/features/candidate/components/candidate-console";
 import { MOCK_CANDIDATE_PROFILE } from "@/features/candidate/data/mock-candidate";
 import type { PublishedJobItem } from "@/features/jobs/actions/job-actions";
 import {
@@ -24,6 +19,7 @@ import {
   getCandidateAssessmentHistory,
   type CandidateAssessmentHistoryItem,
 } from "@/features/assessments/actions/review-actions";
+import type { CandidateProfile } from "@/types";
 
 export const metadata: Metadata = {
   title: "Candidate Dashboard | DevHire",
@@ -62,7 +58,20 @@ export default async function CandidateDashboardPage() {
   // 2. Database-authoritative role verification: Prevent any session bleed or stale token impersonation
   const dbUser = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { id: true, role: true, name: true, email: true },
+    select: {
+      id: true,
+      role: true,
+      name: true,
+      email: true,
+      headline: true,
+      bio: true,
+      avatarUrl: true,
+      skills: true,
+      resumeUrl: true,
+      githubUrl: true,
+      linkedinUrl: true,
+      createdAt: true,
+    },
   });
 
   if (!dbUser) {
@@ -155,7 +164,7 @@ export default async function CandidateDashboardPage() {
     console.error("[Candidate Dashboard]: Failed to fetch candidate assessment invitations:", err);
   }
 
-  // 6. Fetch candidate's real assessment history & review results (Phase 5)
+  // 6. Fetch candidate's real assessment history & review results
   let assessmentHistory: CandidateAssessmentHistoryItem[] = [];
   try {
     const historyRes = await getCandidateAssessmentHistory(session);
@@ -166,44 +175,42 @@ export default async function CandidateDashboardPage() {
     console.error("[Candidate Dashboard]: Failed to fetch candidate assessment history:", err);
   }
 
-  const appliedJobIds = candidateApplications.map((app) => app.jobId);
-
   // Personalize candidate profile with authenticated session details
-  const personalizedProfile = {
+  const personalizedProfile: CandidateProfile = {
     ...MOCK_CANDIDATE_PROFILE,
     name: dbUser.name || session.user.name || MOCK_CANDIDATE_PROFILE.name,
     email: dbUser.email || session.user.email || MOCK_CANDIDATE_PROFILE.email,
+    headline: dbUser.headline || MOCK_CANDIDATE_PROFILE.headline,
+    bio: dbUser.bio || MOCK_CANDIDATE_PROFILE.bio,
+    skills:
+      dbUser.skills && dbUser.skills.length > 0
+        ? dbUser.skills
+        : MOCK_CANDIDATE_PROFILE.skills,
+    githubUrl: dbUser.githubUrl || MOCK_CANDIDATE_PROFILE.githubUrl,
+    linkedinUrl: dbUser.linkedinUrl || MOCK_CANDIDATE_PROFILE.linkedinUrl,
   };
 
   return (
-    <DashboardLayout
-      role="candidate"
-      title="Candidate Engineering Hub"
-      subtitle="Skill verification, active applications, and verified technical assessment history"
-      user={session.user}
-      actionButton={{
-        label: "Explore Open Roles",
-        href: "#jobs",
+    <CandidateConsole
+      user={{
+        id: dbUser.id,
+        name: dbUser.name,
+        email: dbUser.email,
+        headline: dbUser.headline,
+        bio: dbUser.bio,
+        avatarUrl: dbUser.avatarUrl,
+        skills: dbUser.skills,
+        resumeUrl: dbUser.resumeUrl,
+        githubUrl: dbUser.githubUrl,
+        linkedinUrl: dbUser.linkedinUrl,
       }}
-    >
-      {/* Section 1: Candidate Profile Overview */}
-      <ProfileOverviewCard profile={personalizedProfile} />
-
-      {/* Section 2: Technical Assessment History & Results (Phase 5 - Real Neon PostgreSQL Data) */}
-      <CandidateAssessmentHistoryTracker initialHistory={assessmentHistory} />
-
-      {/* Section 3: Technical Assessments & Active Invitations (Phase 4B - Real Neon PostgreSQL Data) */}
-      <UpcomingAssessmentsPreview initialInvitations={candidateInvitations} />
-
-      {/* Section 4: Applications Status Tracker (Phase 3C - Real Neon PostgreSQL Data) */}
-      <CandidateApplicationsTracker applications={candidateApplications} />
-
-      {/* Section 5: Real Published Jobs Discovery (Phase 3B - Neon PostgreSQL) */}
-      <CandidateJobDiscovery
-        initialJobs={initialPublishedJobs}
-        totalCount={totalPublishedCount}
-        initialAppliedJobIds={appliedJobIds}
-      />
-    </DashboardLayout>
+      profile={personalizedProfile}
+      sessionUser={session.user}
+      initialPublishedJobs={initialPublishedJobs}
+      totalPublishedCount={totalPublishedCount}
+      initialApplications={candidateApplications}
+      initialInvitations={candidateInvitations}
+      initialHistory={assessmentHistory}
+    />
   );
 }

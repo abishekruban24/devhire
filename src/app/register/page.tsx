@@ -68,7 +68,7 @@ export default function RegisterHubPage() {
               <CardContent className="space-y-3 text-xs text-slate-300">
                 <div className="flex items-start gap-2.5">
                   <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
-                  <span>Complete sandboxed coding assessments across algorithms and systems.</span>
+                  <span>Complete timed technical coding assessments across algorithms and systems.</span>
                 </div>
                 <div className="flex items-start gap-2.5">
                   <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />

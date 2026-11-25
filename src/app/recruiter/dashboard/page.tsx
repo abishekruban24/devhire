@@ -4,18 +4,9 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import {
-  HiringOverviewMetrics,
-  type RealRecruiterMetrics,
-} from "@/features/recruiter/components/hiring-overview-metrics";
-import {
-  RecruiterJobManagement,
-  type DatabaseJobItem,
-} from "@/features/recruiter/components/recruiter-job-management";
-import { RecruiterApplicantManagement } from "@/features/recruiter/components/recruiter-applicant-management";
-import { RecruiterAssessmentManagement } from "@/features/recruiter/components/recruiter-assessment-management";
-import { RecruiterManualReviewManagement } from "@/features/recruiter/components/recruiter-manual-review-management";
+import { RecruiterConsole } from "@/features/recruiter/components/recruiter-console";
+import type { RealRecruiterMetrics } from "@/features/recruiter/components/hiring-overview-metrics";
+import type { DatabaseJobItem } from "@/features/recruiter/components/recruiter-job-management";
 import type { RecruiterApplicantItem } from "@/features/applications/actions/application-actions";
 import type { RecruiterAssessmentItem } from "@/features/assessments/actions/assessment-actions";
 import {
@@ -72,7 +63,13 @@ export default async function RecruiterDashboardPage() {
       companyId: true,
       company: {
         select: {
+          id: true,
           name: true,
+          slug: true,
+          location: true,
+          industry: true,
+          website: true,
+          description: true,
         },
       },
     },
@@ -105,148 +102,148 @@ export default async function RecruiterDashboardPage() {
     try {
       const [fetchedJobs, fetchedApplications, fetchedAssessments, reviewRes, invRes] =
         await Promise.all([
-            prisma.job.findMany({
-              where: { companyId: dbUser.companyId },
-              include: {
-                _count: {
-                  select: { applications: true },
+          prisma.job.findMany({
+            where: { companyId: dbUser.companyId },
+            include: {
+              _count: {
+                select: { applications: true },
+              },
+            },
+            orderBy: { createdAt: "desc" },
+          }),
+          prisma.application.findMany({
+            where: {
+              job: { companyId: dbUser.companyId },
+            },
+            select: {
+              id: true,
+              jobId: true,
+              candidateId: true,
+              status: true,
+              coverLetter: true,
+              notes: true,
+              createdAt: true,
+              updatedAt: true,
+              candidate: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  headline: true,
+                  bio: true,
+                  avatarUrl: true,
+                  skills: true,
+                  githubUrl: true,
+                  linkedinUrl: true,
+                  resumeUrl: true,
                 },
               },
-              orderBy: { createdAt: "desc" },
-            }),
-            prisma.application.findMany({
-              where: {
-                job: { companyId: dbUser.companyId },
-              },
-              select: {
-                id: true,
-                jobId: true,
-                candidateId: true,
-                status: true,
-                coverLetter: true,
-                notes: true,
-                createdAt: true,
-                updatedAt: true,
-                candidate: {
-                  select: {
-                    id: true,
-                    name: true,
-                    email: true,
-                    headline: true,
-                    bio: true,
-                    avatarUrl: true,
-                    skills: true,
-                    githubUrl: true,
-                    linkedinUrl: true,
-                    resumeUrl: true,
-                  },
-                },
-                job: {
-                  select: {
-                    id: true,
-                    title: true,
-                    slug: true,
-                    location: true,
-                    locationType: true,
-                    type: true,
-                    status: true,
-                  },
+              job: {
+                select: {
+                  id: true,
+                  title: true,
+                  slug: true,
+                  location: true,
+                  locationType: true,
+                  type: true,
+                  status: true,
                 },
               },
-              orderBy: { createdAt: "desc" },
-            }),
-            prisma.assessment.findMany({
-              where: {
-                companyId: dbUser.companyId,
+            },
+            orderBy: { createdAt: "desc" },
+          }),
+          prisma.assessment.findMany({
+            where: {
+              companyId: dbUser.companyId,
+            },
+            select: {
+              id: true,
+              title: true,
+              description: true,
+              durationMinutes: true,
+              passingScore: true,
+              status: true,
+              companyId: true,
+              creatorId: true,
+              creator: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
               },
-              select: {
-                id: true,
-                title: true,
-                description: true,
-                durationMinutes: true,
-                passingScore: true,
-                status: true,
-                companyId: true,
-                creatorId: true,
-                creator: {
-                  select: {
-                    id: true,
-                    name: true,
-                    email: true,
-                  },
+              jobs: {
+                select: {
+                  id: true,
+                  title: true,
+                  slug: true,
+                  status: true,
                 },
-                jobs: {
-                  select: {
-                    id: true,
-                    title: true,
-                    slug: true,
-                    status: true,
-                  },
-                },
-                questions: {
-                  select: {
-                    id: true,
-                    assessmentId: true,
-                    title: true,
-                    description: true,
-                    difficulty: true,
-                    points: true,
-                    timeLimitMs: true,
-                    memoryLimitKb: true,
-                    starterCode: true,
-                    orderIndex: true,
-                    testCases: {
-                      select: {
-                        id: true,
-                        questionId: true,
-                        input: true,
-                        expectedOutput: true,
-                        isHidden: true,
-                        explanation: true,
-                        weight: true,
-                        createdAt: true,
-                      },
-                      orderBy: { createdAt: "asc" },
+              },
+              questions: {
+                select: {
+                  id: true,
+                  assessmentId: true,
+                  title: true,
+                  description: true,
+                  difficulty: true,
+                  points: true,
+                  timeLimitMs: true,
+                  memoryLimitKb: true,
+                  starterCode: true,
+                  orderIndex: true,
+                  testCases: {
+                    select: {
+                      id: true,
+                      questionId: true,
+                      input: true,
+                      expectedOutput: true,
+                      isHidden: true,
+                      explanation: true,
+                      weight: true,
+                      createdAt: true,
                     },
-                    createdAt: true,
+                    orderBy: { createdAt: "asc" },
                   },
-                  orderBy: { orderIndex: "asc" },
+                  createdAt: true,
                 },
-                _count: {
-                  select: {
-                    questions: true,
-                    attempts: true,
-                    jobs: true,
-                  },
-                },
-                createdAt: true,
-                updatedAt: true,
+                orderBy: { orderIndex: "asc" },
               },
-              orderBy: { createdAt: "desc" },
-            }),
-            getCompanySubmissionsForReview("ALL", session),
-            getCompanyInvitations("ALL", session),
-          ]);
+              _count: {
+                select: {
+                  questions: true,
+                  attempts: true,
+                  jobs: true,
+                },
+              },
+              createdAt: true,
+              updatedAt: true,
+            },
+            orderBy: { createdAt: "desc" },
+          }),
+          getCompanySubmissionsForReview("ALL", session),
+          getCompanyInvitations("ALL", session),
+        ]);
 
-        companyJobs = fetchedJobs as unknown as DatabaseJobItem[];
-        companyApplications = fetchedApplications as unknown as RecruiterApplicantItem[];
-        companyAssessments = fetchedAssessments as unknown as RecruiterAssessmentItem[];
+      companyJobs = fetchedJobs as unknown as DatabaseJobItem[];
+      companyApplications = fetchedApplications as unknown as RecruiterApplicantItem[];
+      companyAssessments = fetchedAssessments as unknown as RecruiterAssessmentItem[];
 
-        if (reviewRes.success) {
-          reviewSubmissions = reviewRes.submissions;
-          reviewCounts = reviewRes.counts;
-        }
-
-        if (invRes.success) {
-          companyInvitations = invRes.invitations;
-        }
-      } catch (err) {
-        console.error(
-          "[Recruiter Dashboard]: Failed to fetch company jobs, applications, assessments, and reviews from database:",
-          err
-        );
+      if (reviewRes.success) {
+        reviewSubmissions = reviewRes.submissions;
+        reviewCounts = reviewRes.counts;
       }
+
+      if (invRes.success) {
+        companyInvitations = invRes.invitations;
+      }
+    } catch (err) {
+      console.error(
+        "[Recruiter Dashboard]: Failed to fetch company jobs, applications, assessments, and reviews from database:",
+        err
+      );
     }
+  }
 
   const publishedJobsCount = companyJobs.filter((j) => j.status === "PUBLISHED").length;
   const totalApplicantsCount = companyApplications.length;
@@ -267,44 +264,19 @@ export default async function RecruiterDashboardPage() {
   };
 
   return (
-    <DashboardLayout
-      role="recruiter"
-      title="Recruiter Management Suite"
-      subtitle="Talent pipeline, manual coding reviews, and active technical job postings"
-      user={session.user}
-      actionButton={{
-        label: "Post Opening",
-        href: "#jobs",
-      }}
-    >
-      {/* Section 1: Real Database-Backed Hiring Overview Metrics */}
-      <HiringOverviewMetrics metrics={realMetrics} />
-
-      {/* Section 2: Technical Assessment Manual Review Management (Phase 5) */}
-      <RecruiterManualReviewManagement
-        initialSubmissions={reviewSubmissions}
-        initialCounts={reviewCounts}
-      />
-
-      {/* Section 3: Real Database-Backed Job Postings Management */}
-      <RecruiterJobManagement
-        initialJobs={companyJobs}
-        companyName={companyName}
-      />
-
-      {/* Section 4: Candidate Applications & Assessment Invitations */}
-      <RecruiterApplicantManagement
-        initialApplications={companyApplications}
-        companyJobs={companyJobs.map((j) => ({ id: j.id, title: j.title }))}
-        companyAssessments={companyAssessments}
-        initialInvitations={companyInvitations}
-      />
-
-      {/* Section 5: Technical Assessment Library & Creator */}
-      <RecruiterAssessmentManagement
-        initialAssessments={companyAssessments}
-        companyJobs={companyJobs.map((j) => ({ id: j.id, title: j.title }))}
-      />
-    </DashboardLayout>
+    <RecruiterConsole
+      companyName={companyName}
+      recruiterName={dbUser.name || session.user.name}
+      recruiterEmail={dbUser.email || session.user.email}
+      companyProfile={dbUser.company}
+      sessionUser={session.user}
+      metrics={realMetrics}
+      companyJobs={companyJobs}
+      companyApplications={companyApplications}
+      companyAssessments={companyAssessments}
+      companyInvitations={companyInvitations}
+      reviewSubmissions={reviewSubmissions}
+      reviewCounts={reviewCounts}
+    />
   );
 }

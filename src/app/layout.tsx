@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "DevHire — Smart Technical Recruitment & Coding Assessment Platform",
   description:
-    "Standardized coding assessments, automated test validation, and merit-first technical recruiting platform.",
+    "Timed technical coding assessments, recruiter-led code evaluations, and merit-first engineering recruitment platform.",
 };
 
 export default function RootLayout({

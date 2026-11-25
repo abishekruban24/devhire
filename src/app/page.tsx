@@ -3,7 +3,6 @@ import Link from "next/link";
 import {
   Code2,
   CheckCircle2,
-  Cpu,
   ArrowRight,
   Briefcase,
   UserCheck,
@@ -161,7 +160,7 @@ export default function LandingPage() {
               {/* Subheading */}
               <p className="text-base sm:text-lg text-slate-300 leading-relaxed max-w-3xl mx-auto">
                 The technical recruitment platform engineered for high-signal engineering evaluations.
-                Replace resume guesswork with sandboxed coding benchmarks, automated test validation,
+                Replace resume guesswork with structured coding assessments, recruiter-led technical evaluations,
                 and merit-first talent discovery.
               </p>
 
@@ -178,11 +177,11 @@ export default function LandingPage() {
                 </span>
                 <span className="flex items-center gap-1.5">
                   <Lock className="h-4 w-4 text-blue-400" />
-                  Hidden Server-Side Test Cases
+                  Structured Problem Specifications
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <Cpu className="h-4 w-4 text-violet-400" />
-                  Automated Sandbox Scoring
+                  <UserCheck className="h-4 w-4 text-violet-400" />
+                  Recruiter Technical Evaluations
                 </span>
               </div>
             </div>
@@ -200,9 +199,9 @@ export default function LandingPage() {
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant="mock">UI Showcase</Badge>
-                  <span className="text-[11px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/50 px-2 py-0.5 rounded">
-                    Passed 12/12 Tests
+                  <Badge variant="secondary">Timed Workspace</Badge>
+                  <span className="text-[11px] font-mono text-cyan-400 bg-cyan-950/60 border border-cyan-800/50 px-2 py-0.5 rounded">
+                    Auto-Save Active
                   </span>
                 </div>
               </div>
@@ -251,17 +250,17 @@ export default function LandingPage() {
                 {/* Test results banner */}
                 <div className="mt-4 pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 text-[11px]">
                   <div className="flex items-center gap-3">
-                    <span className="text-emerald-400 flex items-center gap-1 font-semibold">
-                      <CheckCircle2 className="h-3.5 w-3.5" /> 4 Public Test Cases Passed
+                    <span className="text-cyan-400 flex items-center gap-1 font-semibold">
+                      <Code2 className="h-3.5 w-3.5" /> Structured Problem Solving
                     </span>
                     <span className="text-slate-600">•</span>
-                    <span className="text-blue-400 flex items-center gap-1 font-semibold">
-                      <Lock className="h-3.5 w-3.5" /> 8 Hidden Server-Side Cases Verified
+                    <span className="text-indigo-400 flex items-center gap-1 font-semibold">
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Timed Assessment Environment
                     </span>
                   </div>
                   <div className="text-slate-400">
-                    Execution: <span className="text-white font-medium">18ms</span> | Memory:{" "}
-                    <span className="text-white font-medium">2.4 MB</span>
+                    Evaluation: <span className="text-white font-medium">Recruiter Manual Review</span> | Rubric:{" "}
+                    <span className="text-white font-medium">Algorithmic Correctness</span>
                   </div>
                 </div>
               </div>
@@ -290,11 +289,11 @@ export default function LandingPage() {
                   <Code2 className="h-5 w-5" />
                 </div>
                 <CardTitle className="text-base font-semibold text-white mb-2">
-                  Multi-Language Assessment Sandbox
+                  Structured Coding Assessment Workspace
                 </CardTitle>
                 <CardDescription className="text-xs text-slate-400 leading-relaxed">
-                  Support for TypeScript, Python, Go, and SQL challenges with customizable time
-                  and memory constraints, starter code, and sample test suites.
+                  Monaco-powered IDE for algorithmic challenges with customizable time constraints,
+                  starter code, and structured problem specifications.
                 </CardDescription>
               </Card>
 
@@ -304,11 +303,11 @@ export default function LandingPage() {
                   <Lock className="h-5 w-5" />
                 </div>
                 <CardTitle className="text-base font-semibold text-white mb-2">
-                  Hidden Server-Side Test Cases
+                  Custom Problem Specifications & Rubrics
                 </CardTitle>
                 <CardDescription className="text-xs text-slate-400 leading-relaxed">
-                  Protect against solution overfitting. Edge-case and stress tests are securely
-                  retained on the server to ensure genuine algorithmic correctness.
+                  Recruiters author targeted coding challenges with granular scoring criteria,
+                  point distributions, and transparent evaluation rubrics.
                 </CardDescription>
               </Card>
 
@@ -318,11 +317,11 @@ export default function LandingPage() {
                   <BarChart className="h-5 w-5" />
                 </div>
                 <CardTitle className="text-base font-semibold text-white mb-2">
-                  Objective Score Benchmarking
+                  Manual Technical Reviews & Feedback
                 </CardTitle>
                 <CardDescription className="text-xs text-slate-400 leading-relaxed">
-                  Compare submissions across cohorts with percentile breakdowns, execution time
-                  benchmarks, and domain-specific competency scores.
+                  Recruiters evaluate candidate code submissions question-by-question, assign points,
+                  and publish transparent feedback directly to candidates.
                 </CardDescription>
               </Card>
 
@@ -426,10 +425,10 @@ export default function LandingPage() {
                   <Code2 className="h-5 w-5 text-slate-500" />
                 </div>
                 <h3 className="text-base font-bold text-white">
-                  Solve Coding Challenges
+                  Solve Timed Coding Assessments
                 </h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Candidates code solutions in an interactive sandbox against public tests and hidden server test suites.
+                  Candidates submit structured code solutions in a distraction-free IDE with timed attempts and auto-save protection.
                 </p>
               </div>
 
@@ -442,10 +441,10 @@ export default function LandingPage() {
                   <CheckCircle2 className="h-5 w-5 text-slate-500" />
                 </div>
                 <h3 className="text-base font-bold text-white">
-                  Rank & Shortlist
+                  Evaluate & Shortlist
                 </h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Submissions are graded objectively. Top percentile candidates are automatically shortlisted for final interviews.
+                  Recruiters evaluate submissions through comprehensive manual scoring, publish actionable feedback, and advance top candidates.
                 </p>
               </div>
             </div>
@@ -505,7 +504,7 @@ export default function LandingPage() {
                     Recruiter Dashboard
                   </h3>
                   <p className="text-sm text-slate-300 leading-relaxed">
-                    Manage active job listings, review applicant pipelines scored by algorithmic benchmarks, inspect topic pass rates, and shortlist top talent.
+                    Manage active job listings, review applicant pipelines scored by technical evaluations, inspect submission reviews, and shortlist top talent.
                   </p>
                   <ul className="space-y-2 text-xs text-slate-400 pt-2">
                     <li className="flex items-center gap-2">
@@ -514,11 +513,11 @@ export default function LandingPage() {
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle2 className="h-3.5 w-3.5 text-violet-400" />
-                      Candidate submissions table with match percentages
+                      Candidate submissions with manual review workflow
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle2 className="h-3.5 w-3.5 text-violet-400" />
-                      Domain pass rates across TypeScript, Go, and SQL
+                      Granular question-level scoring and published feedback
                     </li>
                   </ul>
                 </div>

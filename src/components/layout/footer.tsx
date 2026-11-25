@@ -18,12 +18,12 @@ export function Footer() {
             <p className="max-w-md text-sm text-slate-400 leading-relaxed">
               A high-precision technical recruitment and coding assessment platform.
               Bridging top engineering talent and forward-thinking hiring teams through
-              automated coding sandboxes, proctored benchmarks, and merit-based shortlisting.
+              timed coding assessments, structured technical evaluations, and merit-based shortlisting.
             </p>
             <div className="flex items-center gap-2 pt-1">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-400">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Phase 1 Foundation Active
+                Live Production Active
               </span>
               <span className="text-xs text-slate-500">•</span>
               <span className="text-xs text-slate-400">Vercel & Next.js 16 Ready</span>
