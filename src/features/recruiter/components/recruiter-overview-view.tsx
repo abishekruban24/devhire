@@ -170,7 +170,7 @@ export function RecruiterOverviewView({
                     {companyName}
                   </div>
                   <div className="text-[10px] text-purple-300/80 font-mono">
-                    Verified Employer
+                    Registered Employer
                   </div>
                 </div>
               </div>

@@ -5,7 +5,6 @@ import { connection } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { CandidateConsole } from "@/features/candidate/components/candidate-console";
-import { MOCK_CANDIDATE_PROFILE } from "@/features/candidate/data/mock-candidate";
 import type { PublishedJobItem } from "@/features/jobs/actions/job-actions";
 import {
   getCandidateApplications,
@@ -175,19 +174,31 @@ export default async function CandidateDashboardPage() {
     console.error("[Candidate Dashboard]: Failed to fetch candidate assessment history:", err);
   }
 
-  // Personalize candidate profile with authenticated session details
-  const personalizedProfile: CandidateProfile = {
-    ...MOCK_CANDIDATE_PROFILE,
-    name: dbUser.name || session.user.name || MOCK_CANDIDATE_PROFILE.name,
-    email: dbUser.email || session.user.email || MOCK_CANDIDATE_PROFILE.email,
-    headline: dbUser.headline || MOCK_CANDIDATE_PROFILE.headline,
-    bio: dbUser.bio || MOCK_CANDIDATE_PROFILE.bio,
-    skills:
-      dbUser.skills && dbUser.skills.length > 0
-        ? dbUser.skills
-        : MOCK_CANDIDATE_PROFILE.skills,
-    githubUrl: dbUser.githubUrl || MOCK_CANDIDATE_PROFILE.githubUrl,
-    linkedinUrl: dbUser.linkedinUrl || MOCK_CANDIDATE_PROFILE.linkedinUrl,
+  // Compute real assessment statistics from actual database records
+  const publishedAttempts = assessmentHistory.filter(
+    (h) => h.lifecycleState === "RESULTS_PUBLISHED" && h.score !== null
+  );
+  const realCompletedCount = publishedAttempts.length;
+  const realAverageScore =
+    realCompletedCount > 0
+      ? Math.round(
+          publishedAttempts.reduce((sum, h) => sum + (h.score ?? 0), 0) / realCompletedCount
+        )
+      : 0;
+
+  const realProfile: CandidateProfile = {
+    id: dbUser.id,
+    name: dbUser.name || session.user.name || "Candidate",
+    email: dbUser.email || session.user.email || "",
+    headline: dbUser.headline || "",
+    avatarUrl: dbUser.avatarUrl || "",
+    location: "Remote / Global",
+    skills: dbUser.skills || [],
+    bio: dbUser.bio || "",
+    completedAssessments: realCompletedCount,
+    averageScore: realAverageScore,
+    githubUrl: dbUser.githubUrl || undefined,
+    linkedinUrl: dbUser.linkedinUrl || undefined,
   };
 
   return (
@@ -204,7 +215,7 @@ export default async function CandidateDashboardPage() {
         githubUrl: dbUser.githubUrl,
         linkedinUrl: dbUser.linkedinUrl,
       }}
-      profile={personalizedProfile}
+      profile={realProfile}
       sessionUser={session.user}
       initialPublishedJobs={initialPublishedJobs}
       totalPublishedCount={totalPublishedCount}
