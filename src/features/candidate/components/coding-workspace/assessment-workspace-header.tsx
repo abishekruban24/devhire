@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Send,
   Loader2,
+  Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -22,6 +23,10 @@ interface AssessmentWorkspaceHeaderProps {
   onSubmitClick: () => void;
   isSubmitting?: boolean;
   readOnly?: boolean;
+  proctoringEnabled?: boolean;
+  violationCount?: number;
+  maxViolations?: number | null;
+  webcamActive?: boolean;
 }
 
 export function AssessmentWorkspaceHeader({
@@ -36,6 +41,10 @@ export function AssessmentWorkspaceHeader({
   onSubmitClick,
   isSubmitting = false,
   readOnly = false,
+  proctoringEnabled = false,
+  violationCount = 0,
+  maxViolations = null,
+  webcamActive = false,
 }: AssessmentWorkspaceHeaderProps) {
   // Format timer as HH:MM:SS or MM:SS
   const formatTime = (totalSecs: number) => {
@@ -118,6 +127,33 @@ export function AssessmentWorkspaceHeader({
 
       {/* Right: Server-Authoritative Timer & Submit Action */}
       <div className="flex items-center gap-3 shrink-0">
+        {/* Proctoring Status Pill */}
+        {proctoringEnabled && (
+          <div
+            className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-medium shadow-inner transition-colors ${
+              violationCount > 0
+                ? "bg-amber-950/40 border-amber-800/60 text-amber-300"
+                : "bg-blue-950/40 border-blue-800/50 text-blue-300"
+            }`}
+            title="Real-time smart proctoring active"
+          >
+            <Shield className="h-3.5 w-3.5 text-blue-400" />
+            <span>
+              {maxViolations
+                ? `Violations: ${violationCount}/${maxViolations}`
+                : violationCount > 0
+                ? `${violationCount} Notice(s)`
+                : "Proctored"}
+            </span>
+            {webcamActive && (
+              <span className="flex items-center gap-1 pl-1 border-l border-slate-700">
+                <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
+                <span className="text-[10px] text-slate-400">Rec</span>
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Countdown Timer */}
         <div
           className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-mono font-bold tracking-wider shadow-inner transition-colors ${getTimerStyles(

@@ -3,10 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import type {
-  AttemptStatus,
-  QuestionDifficulty,
+import {
+  Prisma,
+  type AttemptStatus,
+  type QuestionDifficulty,
+  type SubmissionReason,
+  type IntegrityEventType,
 } from "@prisma/client";
+
+export type { SubmissionReason };
 
 export interface SessionContext {
   user?: {
@@ -41,6 +46,29 @@ export interface SavedDraft {
   updatedAt: string;
 }
 
+export interface AssessmentProctoringConfig {
+  enableProctoring: boolean;
+  requireFullscreen: boolean;
+  trackTabSwitches: boolean;
+  trackFocusLoss: boolean;
+  restrictPaste: boolean;
+  restrictCopy: boolean;
+  maxViolations: number;
+  autoSubmitOnViolations: boolean;
+  webcamProctoring: boolean;
+  recordingMode: string;
+}
+
+export interface AssessmentIntegrityStatus {
+  violationCount: number;
+  consentGivenAt?: string | null;
+  cameraConsentGiven: boolean;
+  recordingConsentGiven: boolean;
+  accommodationGranted: boolean;
+  accommodationNotes?: string | null;
+  submissionReason: SubmissionReason;
+}
+
 export interface AssessmentAttemptData {
   attemptId: string;
   assessmentId: string;
@@ -60,6 +88,8 @@ export interface AssessmentAttemptData {
   submittedAt?: string | null;
   questions: CandidateQuestionItem[];
   savedDrafts: Record<string, SavedDraft>;
+  proctoring: AssessmentProctoringConfig;
+  integrity: AssessmentIntegrityStatus;
 }
 
 export interface SaveDraftInput {
@@ -71,6 +101,7 @@ export interface SaveDraftInput {
 
 export interface SubmitAttemptInput {
   attemptId: string;
+  submissionReason?: SubmissionReason;
   answers?: {
     questionId: string;
     code: string;
@@ -508,6 +539,16 @@ export async function getAssessmentAttemptData(
             description: true,
             durationMinutes: true,
             passingScore: true,
+            enableProctoring: true,
+            requireFullscreen: true,
+            trackTabSwitches: true,
+            trackFocusLoss: true,
+            restrictPaste: true,
+            restrictCopy: true,
+            maxViolations: true,
+            autoSubmitOnViolations: true,
+            webcamProctoring: true,
+            recordingMode: true,
             company: {
               select: {
                 id: true,
@@ -602,7 +643,9 @@ export async function getAssessmentAttemptData(
 
     const isSubmitted = currentStatus === "SUBMITTED" || currentStatus === "EVALUATED";
     const timeRemainingSeconds =
-      attempt.expiresAt && !isSubmitted && !isExpired
+      !attempt.consentGivenAt && !isSubmitted && !isExpired
+        ? (attempt.assessment.durationMinutes || 60) * 60
+        : attempt.expiresAt && !isSubmitted && !isExpired
         ? Math.max(0, Math.floor((attempt.expiresAt.getTime() - now.getTime()) / 1000))
         : 0;
 
@@ -656,6 +699,27 @@ export async function getAssessmentAttemptData(
       submittedAt: attempt.submittedAt ? attempt.submittedAt.toISOString() : null,
       questions,
       savedDrafts,
+      proctoring: {
+        enableProctoring: attempt.assessment.enableProctoring,
+        requireFullscreen: attempt.assessment.requireFullscreen,
+        trackTabSwitches: attempt.assessment.trackTabSwitches,
+        trackFocusLoss: attempt.assessment.trackFocusLoss,
+        restrictPaste: attempt.assessment.restrictPaste,
+        restrictCopy: attempt.assessment.restrictCopy,
+        maxViolations: attempt.assessment.maxViolations,
+        autoSubmitOnViolations: attempt.assessment.autoSubmitOnViolations,
+        webcamProctoring: attempt.assessment.webcamProctoring,
+        recordingMode: attempt.assessment.recordingMode,
+      },
+      integrity: {
+        violationCount: attempt.violationCount,
+        consentGivenAt: attempt.consentGivenAt ? attempt.consentGivenAt.toISOString() : null,
+        cameraConsentGiven: attempt.cameraConsentGiven,
+        recordingConsentGiven: attempt.recordingConsentGiven,
+        accommodationGranted: attempt.accommodationGranted,
+        accommodationNotes: attempt.accommodationNotes,
+        submissionReason: attempt.submissionReason,
+      },
     };
 
     return {
@@ -1023,6 +1087,7 @@ export async function submitAssessmentAttempt(
         data: {
           status: "SUBMITTED",
           submittedAt: now,
+          submissionReason: input.submissionReason || "MANUAL",
         },
       });
 
@@ -1064,4 +1129,271 @@ export async function submitAssessmentAttempt(
       errorType: "SERVER_ERROR",
     };
   }
+}
+
+/**
+ * CONFIRM CANDIDATE PRE-ASSESSMENT ONBOARDING (Phase 9B & 9C)
+ * Candidate acknowledges proctoring rules, grants camera/recording consent,
+ * and enters the active workspace.
+ * SERVER-AUTHORITATIVE TIMER START:
+ * Timer starts ONLY after this acknowledgment is confirmed!
+ */
+export async function confirmAssessmentOnboarding(
+  input: {
+    attemptId: string;
+    cameraConsent?: boolean;
+    recordingConsent?: boolean;
+    accommodationNotes?: string;
+  },
+  sessionOverride?: SessionContext | null
+): Promise<{
+  success: boolean;
+  message: string;
+  startedAt?: string;
+  expiresAt?: string;
+}> {
+  const authCheck = await authenticateCandidate(sessionOverride);
+  if (!authCheck.authenticated || !authCheck.user?.id) {
+    return { success: false, message: "Authentication required." };
+  }
+
+  const cleanAttemptId = input.attemptId?.trim();
+  const attempt = await prisma.assessmentAttempt.findUnique({
+    where: { id: cleanAttemptId },
+    include: {
+      assessment: {
+        select: { durationMinutes: true },
+      },
+    },
+  });
+
+  if (!attempt || attempt.candidateId !== authCheck.user.id) {
+    return { success: false, message: "Attempt not found or unauthorized." };
+  }
+
+  const now = new Date();
+  const duration = attempt.assessment.durationMinutes || 60;
+  const deadline = new Date(now.getTime() + duration * 60 * 1000);
+
+  // If already consented, preserve existing timer
+  if (attempt.consentGivenAt) {
+    return {
+      success: true,
+      message: "Onboarding already acknowledged.",
+      startedAt: attempt.startedAt ? attempt.startedAt.toISOString() : now.toISOString(),
+      expiresAt: attempt.expiresAt ? attempt.expiresAt.toISOString() : deadline.toISOString(),
+    };
+  }
+
+  await prisma.assessmentAttempt.update({
+    where: { id: attempt.id },
+    data: {
+      consentGivenAt: now,
+      startedAt: now,
+      expiresAt: deadline,
+      cameraConsentGiven: !!input.cameraConsent,
+      recordingConsentGiven: !!input.recordingConsent,
+      accommodationNotes: input.accommodationNotes?.trim() || null,
+      accommodationGranted: !!input.accommodationNotes?.trim(),
+    },
+  });
+
+  safeRevalidatePath(`/candidate/assessment/${attempt.id}`);
+
+  return {
+    success: true,
+    message: "Onboarding completed. Assessment timer started.",
+    startedAt: now.toISOString(),
+    expiresAt: deadline.toISOString(),
+  };
+}
+
+/**
+ * LOG INTEGRITY EVENT (Phase 9B & 9C)
+ * Persists an assessment violation or telemetry signal in IntegrityEvent table.
+ * Increments violation count and triggers automated submission if threshold reached.
+ */
+export async function logIntegrityEvent(
+  input: {
+    attemptId: string;
+    eventType: IntegrityEventType;
+    metadata?: Record<string, unknown>;
+  },
+  sessionOverride?: SessionContext | null
+): Promise<{
+  success: boolean;
+  violationCount: number;
+  shouldAutoSubmit: boolean;
+  message: string;
+}> {
+  const authCheck = await authenticateCandidate(sessionOverride);
+  if (!authCheck.authenticated || !authCheck.user?.id) {
+    return {
+      success: false,
+      violationCount: 0,
+      shouldAutoSubmit: false,
+      message: authCheck.error || "Authentication required.",
+    };
+  }
+
+  const cleanAttemptId = input.attemptId?.trim();
+  const attempt = await prisma.assessmentAttempt.findUnique({
+    where: { id: cleanAttemptId },
+    include: {
+      assessment: {
+        select: {
+          enableProctoring: true,
+          maxViolations: true,
+          autoSubmitOnViolations: true,
+        },
+      },
+    },
+  });
+
+  if (!attempt || attempt.candidateId !== authCheck.user.id) {
+    return {
+      success: false,
+      violationCount: 0,
+      shouldAutoSubmit: false,
+      message: "Attempt not found or unauthorized.",
+    };
+  }
+
+  if (attempt.status !== "IN_PROGRESS") {
+    return {
+      success: true,
+      violationCount: attempt.violationCount,
+      shouldAutoSubmit: false,
+      message: "Attempt is no longer in progress.",
+    };
+  }
+
+  // Record integrity event in DB
+  await prisma.integrityEvent.create({
+    data: {
+      attemptId: attempt.id,
+      eventType: input.eventType,
+      metadata: (input.metadata as Prisma.InputJsonValue) || {},
+    },
+  });
+
+  // Non-punitive review signals (FACE_ABSENT, CAMERA_DISCONNECTED) are logged for recruiter audit but do NOT penalize candidate towards auto-termination
+  const isPunitiveViolation =
+    input.eventType === "TAB_SWITCH" ||
+    input.eventType === "FOCUS_LOSS" ||
+    input.eventType === "FULLSCREEN_EXIT" ||
+    input.eventType === "PASTE_ATTEMPT" ||
+    input.eventType === "COPY_ATTEMPT";
+
+  // Calculate new violation count
+  const newViolationCount = isPunitiveViolation
+    ? attempt.violationCount + 1
+    : attempt.violationCount;
+  const maxViolations = attempt.assessment.maxViolations || 3;
+  const shouldAutoSubmit =
+    isPunitiveViolation &&
+    attempt.assessment.autoSubmitOnViolations &&
+    newViolationCount >= maxViolations;
+
+  await prisma.assessmentAttempt.update({
+    where: { id: attempt.id },
+    data: {
+      violationCount: newViolationCount,
+      ...(shouldAutoSubmit
+        ? {
+            status: "SUBMITTED",
+            submittedAt: new Date(),
+            submissionReason: "POLICY_VIOLATION",
+          }
+        : {}),
+    },
+  });
+
+  if (shouldAutoSubmit) {
+    if (attempt.invitationId) {
+      await prisma.assessmentInvitation.update({
+        where: { id: attempt.invitationId },
+        data: { status: "COMPLETED", completedAt: new Date() },
+      });
+    }
+    if (attempt.applicationId) {
+      await prisma.application.update({
+        where: { id: attempt.applicationId },
+        data: { status: "ASSESSMENT_COMPLETED" },
+      });
+    }
+    safeRevalidatePath("/candidate/dashboard");
+    safeRevalidatePath(`/candidate/assessment/${attempt.id}`);
+  }
+
+  return {
+    success: true,
+    violationCount: newViolationCount,
+    shouldAutoSubmit,
+    message: shouldAutoSubmit
+      ? "Violation limit reached. Assessment submitted automatically."
+      : `Violation recorded (${newViolationCount}/${maxViolations}).`,
+  };
+}
+
+/**
+ * SAVE ASSESSMENT RECORDING (Phase 9D)
+ * Persists an incident or session recording chunk with a retention expiration policy.
+ */
+export async function saveAssessmentRecording(
+  input: {
+    attemptId: string;
+    recordingType: "INCIDENT" | "FULL";
+    videoDataUrlOrKey?: string;
+    storageKey?: string;
+    durationSeconds?: number;
+    triggerEvent?: IntegrityEventType;
+    incidentEventType?: string;
+    fileSizeBytes?: number;
+    fileSize?: number;
+  },
+  sessionOverride?: SessionContext | null
+): Promise<{ success: boolean; recordingId?: string; message: string }> {
+  const authCheck = await authenticateCandidate(sessionOverride);
+  if (!authCheck.authenticated || !authCheck.user?.id) {
+    return { success: false, message: "Authentication required." };
+  }
+
+  const cleanAttemptId = input.attemptId?.trim();
+  const attempt = await prisma.assessmentAttempt.findUnique({
+    where: { id: cleanAttemptId },
+    select: { id: true, candidateId: true },
+  });
+
+  if (!attempt || attempt.candidateId !== authCheck.user.id) {
+    return { success: false, message: "Attempt not found or unauthorized." };
+  }
+
+  // Enforce 7-day storage retention policy
+  const retentionExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  const rawKey = input.storageKey || input.videoDataUrlOrKey || "data:video/webm;base64,placeholder";
+  const fileSize = input.fileSize ?? input.fileSizeBytes ?? 0;
+  const incidentEvent = input.incidentEventType || (input.triggerEvent ? String(input.triggerEvent) : null);
+
+  const recording = await prisma.assessmentRecording.create({
+    data: {
+      attemptId: attempt.id,
+      recordingType: input.recordingType,
+      storageKey: String(rawKey).slice(0, 500),
+      storageProvider: "LOCAL_DEV",
+      fileSize,
+      mimeType: "video/webm",
+      durationSeconds: input.durationSeconds || 15,
+      incidentEventType: incidentEvent,
+      status: "READY",
+      expiresAt: retentionExpiresAt,
+    },
+  });
+
+  return {
+    success: true,
+    recordingId: recording.id,
+    message: "Recording saved successfully.",
+  };
 }

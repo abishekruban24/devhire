@@ -24,6 +24,9 @@ import {
   Lock,
   Unlock,
   Archive,
+  Shield,
+  Camera,
+  Video,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -123,6 +126,18 @@ export function RecruiterAssessmentManagement({
   const [formJobId, setFormJobId] = useState<string>("");
   const [formQuestions, setFormQuestions] = useState<QuestionFormState[]>([DEFAULT_QUESTION]);
 
+  // Proctoring Settings State (Phase 9B, 9C, 9D)
+  const [formEnableProctoring, setFormEnableProctoring] = useState<boolean>(false);
+  const [formRequireFullscreen, setFormRequireFullscreen] = useState<boolean>(false);
+  const [formTrackTabSwitches, setFormTrackTabSwitches] = useState<boolean>(true);
+  const [formTrackFocusLoss, setFormTrackFocusLoss] = useState<boolean>(true);
+  const [formRestrictPaste, setFormRestrictPaste] = useState<boolean>(true);
+  const [formRestrictCopy, setFormRestrictCopy] = useState<boolean>(true);
+  const [formMaxViolations, setFormMaxViolations] = useState<number>(3);
+  const [formAutoSubmitOnViolations, setFormAutoSubmitOnViolations] = useState<boolean>(true);
+  const [formWebcamProctoring, setFormWebcamProctoring] = useState<boolean>(false);
+  const [formRecordingMode, setFormRecordingMode] = useState<string>("NONE");
+
   // Active question editing within modal
   const [activeQuestionIdx, setActiveQuestionIdx] = useState<number>(0);
 
@@ -152,6 +167,16 @@ export function RecruiterAssessmentManagement({
     setFormStatus("DRAFT");
     setFormJobId(companyJobs[0]?.id || "");
     setFormQuestions([{ ...DEFAULT_QUESTION }]);
+    setFormEnableProctoring(false);
+    setFormRequireFullscreen(false);
+    setFormTrackTabSwitches(true);
+    setFormTrackFocusLoss(true);
+    setFormRestrictPaste(true);
+    setFormRestrictCopy(true);
+    setFormMaxViolations(3);
+    setFormAutoSubmitOnViolations(true);
+    setFormWebcamProctoring(false);
+    setFormRecordingMode("NONE");
     setActiveQuestionIdx(0);
     setFeedback(null);
     setIsModalOpen(true);
@@ -165,6 +190,16 @@ export function RecruiterAssessmentManagement({
     setFormPassingScore(item.passingScore);
     setFormStatus(item.status);
     setFormJobId(item.jobs[0]?.id || "");
+    setFormEnableProctoring(item.enableProctoring ?? false);
+    setFormRequireFullscreen(item.requireFullscreen ?? false);
+    setFormTrackTabSwitches(item.trackTabSwitches ?? true);
+    setFormTrackFocusLoss(item.trackFocusLoss ?? true);
+    setFormRestrictPaste(item.restrictPaste ?? true);
+    setFormRestrictCopy(item.restrictCopy ?? true);
+    setFormMaxViolations(item.maxViolations ?? 3);
+    setFormAutoSubmitOnViolations(item.autoSubmitOnViolations ?? true);
+    setFormWebcamProctoring(item.webcamProctoring ?? false);
+    setFormRecordingMode(item.recordingMode ?? "NONE");
     setFeedback(null);
 
     if (item.questions && item.questions.length > 0) {
@@ -322,6 +357,16 @@ export function RecruiterAssessmentManagement({
           passingScore: formPassingScore,
           status: formStatus,
           jobId: formJobId || null,
+          enableProctoring: formEnableProctoring,
+          requireFullscreen: formRequireFullscreen,
+          trackTabSwitches: formTrackTabSwitches,
+          trackFocusLoss: formTrackFocusLoss,
+          restrictPaste: formRestrictPaste,
+          restrictCopy: formRestrictCopy,
+          maxViolations: formMaxViolations,
+          autoSubmitOnViolations: formAutoSubmitOnViolations,
+          webcamProctoring: formWebcamProctoring,
+          recordingMode: formRecordingMode,
         });
 
         if (res.success) {
@@ -335,6 +380,16 @@ export function RecruiterAssessmentManagement({
                     durationMinutes: formDuration,
                     passingScore: formPassingScore,
                     status: formStatus,
+                    enableProctoring: formEnableProctoring,
+                    requireFullscreen: formRequireFullscreen,
+                    trackTabSwitches: formTrackTabSwitches,
+                    trackFocusLoss: formTrackFocusLoss,
+                    restrictPaste: formRestrictPaste,
+                    restrictCopy: formRestrictCopy,
+                    maxViolations: formMaxViolations,
+                    autoSubmitOnViolations: formAutoSubmitOnViolations,
+                    webcamProctoring: formWebcamProctoring,
+                    recordingMode: formRecordingMode,
                     jobs: formJobId
                       ? [
                           {
@@ -364,6 +419,16 @@ export function RecruiterAssessmentManagement({
           status: formStatus,
           jobId: formJobId || null,
           questions: questionsPayload,
+          enableProctoring: formEnableProctoring,
+          requireFullscreen: formRequireFullscreen,
+          trackTabSwitches: formTrackTabSwitches,
+          trackFocusLoss: formTrackFocusLoss,
+          restrictPaste: formRestrictPaste,
+          restrictCopy: formRestrictCopy,
+          maxViolations: formMaxViolations,
+          autoSubmitOnViolations: formAutoSubmitOnViolations,
+          webcamProctoring: formWebcamProctoring,
+          recordingMode: formRecordingMode,
         });
 
         if (res.success && res.assessmentId) {
@@ -377,6 +442,16 @@ export function RecruiterAssessmentManagement({
             companyId: "company-id",
             creatorId: "creator-id",
             creator: { id: "me", name: "Recruiter", email: "me@devhire.test" },
+            enableProctoring: formEnableProctoring,
+            requireFullscreen: formRequireFullscreen,
+            trackTabSwitches: formTrackTabSwitches,
+            trackFocusLoss: formTrackFocusLoss,
+            restrictPaste: formRestrictPaste,
+            restrictCopy: formRestrictCopy,
+            maxViolations: formMaxViolations,
+            autoSubmitOnViolations: formAutoSubmitOnViolations,
+            webcamProctoring: formWebcamProctoring,
+            recordingMode: formRecordingMode,
             jobs: formJobId
               ? [
                   {
@@ -723,6 +798,27 @@ export function RecruiterAssessmentManagement({
                     <span>{totalAttempts} candidate attempt(s)</span>
                   </div>
 
+                  {item.enableProctoring && (
+                    <div className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-950/60 text-blue-300 border border-blue-800/40">
+                      <Shield className="h-3 w-3 text-blue-400" />
+                      <span>Proctored</span>
+                    </div>
+                  )}
+
+                  {item.webcamProctoring && (
+                    <div className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-950/60 text-purple-300 border border-purple-800/40">
+                      <Camera className="h-3 w-3 text-purple-400" />
+                      <span>Webcam</span>
+                    </div>
+                  )}
+
+                  {item.recordingMode && item.recordingMode !== "NONE" && (
+                    <div className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-950/60 text-rose-300 border border-rose-800/40">
+                      <Video className="h-3 w-3 text-rose-400" />
+                      <span>{item.recordingMode === "FULL" ? "Full Video" : "Incident Clips"}</span>
+                    </div>
+                  )}
+
                   <div className="ml-auto text-[11px] text-slate-500">
                     Created {formatDate(item.createdAt)}
                   </div>
@@ -947,7 +1043,169 @@ export function RecruiterAssessmentManagement({
                 </div>
               </div>
 
-              {/* Section 2: Questions & Test Cases Builder */}
+              {/* Section 2: Smart Proctoring & Assessment Integrity (Phase 9B, 9C, 9D) */}
+              <div className="space-y-4 pt-4 border-t border-slate-800">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
+                    <Shield className="h-3.5 w-3.5" />
+                    Smart Proctoring & Anti-Cheating Settings
+                  </h4>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formEnableProctoring}
+                      onChange={(e) => setFormEnableProctoring(e.target.checked)}
+                      className="rounded border-slate-700 bg-slate-900 text-purple-600 focus:ring-purple-500 h-4 w-4"
+                    />
+                    <span className="text-xs font-semibold text-white">Enable Proctoring</span>
+                  </label>
+                </div>
+
+                {formEnableProctoring ? (
+                  <div className="rounded-xl border border-purple-500/30 bg-[#0E1526]/70 p-4 space-y-4 animate-in fade-in duration-200">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      {/* Require Fullscreen */}
+                      <label className="flex items-start gap-2.5 p-3 rounded-lg border border-slate-800/80 bg-[#080C14] cursor-pointer hover:border-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={formRequireFullscreen}
+                          onChange={(e) => setFormRequireFullscreen(e.target.checked)}
+                          className="mt-0.5 rounded border-slate-700 bg-slate-900 text-purple-600 focus:ring-purple-500 h-4 w-4"
+                        />
+                        <div>
+                          <strong className="text-white block font-medium">Require Fullscreen</strong>
+                          <span className="text-[11px] text-slate-400">Flags exits from browser fullscreen mode</span>
+                        </div>
+                      </label>
+
+                      {/* Track Tab Switches */}
+                      <label className="flex items-start gap-2.5 p-3 rounded-lg border border-slate-800/80 bg-[#080C14] cursor-pointer hover:border-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={formTrackTabSwitches}
+                          onChange={(e) => setFormTrackTabSwitches(e.target.checked)}
+                          className="mt-0.5 rounded border-slate-700 bg-slate-900 text-purple-600 focus:ring-purple-500 h-4 w-4"
+                        />
+                        <div>
+                          <strong className="text-white block font-medium">Track Tab Switches</strong>
+                          <span className="text-[11px] text-slate-400">Detects Page Visibility API tab switches</span>
+                        </div>
+                      </label>
+
+                      {/* Track Focus Loss */}
+                      <label className="flex items-start gap-2.5 p-3 rounded-lg border border-slate-800/80 bg-[#080C14] cursor-pointer hover:border-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={formTrackFocusLoss}
+                          onChange={(e) => setFormTrackFocusLoss(e.target.checked)}
+                          className="mt-0.5 rounded border-slate-700 bg-slate-900 text-purple-600 focus:ring-purple-500 h-4 w-4"
+                        />
+                        <div>
+                          <strong className="text-white block font-medium">Track Window Blur / Focus Loss</strong>
+                          <span className="text-[11px] text-slate-400">Detects switching to other desktop applications</span>
+                        </div>
+                      </label>
+
+                      {/* Restrict Code Paste */}
+                      <label className="flex items-start gap-2.5 p-3 rounded-lg border border-slate-800/80 bg-[#080C14] cursor-pointer hover:border-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={formRestrictPaste}
+                          onChange={(e) => setFormRestrictPaste(e.target.checked)}
+                          className="mt-0.5 rounded border-slate-700 bg-slate-900 text-purple-600 focus:ring-purple-500 h-4 w-4"
+                        />
+                        <div>
+                          <strong className="text-white block font-medium">Block External Paste</strong>
+                          <span className="text-[11px] text-slate-400">Prevents pasting external clipboard code into Monaco</span>
+                        </div>
+                      </label>
+
+                      {/* Restrict Copy */}
+                      <label className="flex items-start gap-2.5 p-3 rounded-lg border border-slate-800/80 bg-[#080C14] cursor-pointer hover:border-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={formRestrictCopy}
+                          onChange={(e) => setFormRestrictCopy(e.target.checked)}
+                          className="mt-0.5 rounded border-slate-700 bg-slate-900 text-purple-600 focus:ring-purple-500 h-4 w-4"
+                        />
+                        <div>
+                          <strong className="text-white block font-medium">Restrict Problem Copying</strong>
+                          <span className="text-[11px] text-slate-400">Disables copying problem text and test cases</span>
+                        </div>
+                      </label>
+
+                      {/* Webcam Proctoring */}
+                      <label className="flex items-start gap-2.5 p-3 rounded-lg border border-slate-800/80 bg-[#080C14] cursor-pointer hover:border-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={formWebcamProctoring}
+                          onChange={(e) => setFormWebcamProctoring(e.target.checked)}
+                          className="mt-0.5 rounded border-slate-700 bg-slate-900 text-purple-600 focus:ring-purple-500 h-4 w-4"
+                        />
+                        <div>
+                          <strong className="text-white block font-medium flex items-center gap-1.5">
+                            <Camera className="h-3 w-3 text-purple-400" />
+                            Smart Webcam Presence
+                          </strong>
+                          <span className="text-[11px] text-slate-400">Local face presence detection (no audio recorded)</span>
+                        </div>
+                      </label>
+                    </div>
+
+                    {/* Violation Limits & Recording Mode */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-800/60 text-xs">
+                      <div>
+                        <label className="text-xs font-semibold text-slate-200 block mb-1">
+                          Max Policy Violations
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={10}
+                          value={formMaxViolations}
+                          onChange={(e) => setFormMaxViolations(Math.max(1, Math.min(10, Number(e.target.value))))}
+                          className="w-full px-3 py-2 bg-[#080C14] border border-slate-700 rounded-lg text-xs text-slate-100 focus:outline-none focus:border-purple-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-semibold text-slate-200 block mb-1">
+                          Auto-Submit on Limit
+                        </label>
+                        <select
+                          value={formAutoSubmitOnViolations ? "YES" : "NO"}
+                          onChange={(e) => setFormAutoSubmitOnViolations(e.target.value === "YES")}
+                          className="w-full px-3 py-2 bg-[#080C14] border border-slate-700 rounded-lg text-xs text-slate-100 focus:outline-none focus:border-purple-500"
+                        >
+                          <option value="YES">Yes — Auto-Submit (POLICY_VIOLATION)</option>
+                          <option value="NO">No — Review Signal Only</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-semibold text-slate-200 block mb-1">
+                          Video Recording Mode
+                        </label>
+                        <select
+                          value={formRecordingMode}
+                          onChange={(e) => setFormRecordingMode(e.target.value)}
+                          className="w-full px-3 py-2 bg-[#080C14] border border-slate-700 rounded-lg text-xs text-slate-100 focus:outline-none focus:border-purple-500"
+                        >
+                          <option value="NONE">No Video Recording</option>
+                          <option value="INCIDENT_ONLY">Incident-Based (15-30s clips)</option>
+                          <option value="FULL">Full Assessment Session</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500 italic">
+                    Proctoring is disabled. Candidates will take this assessment in standard open-workspace mode without browser tracking or webcam requirements.
+                  </p>
+                )}
+              </div>
+
+              {/* Section 3: Questions & Test Cases Builder */}
               <div className="space-y-4 pt-4 border-t border-slate-800">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-blue-400 flex items-center gap-1.5">
